@@ -1,0 +1,308 @@
+---
+title: "Virtual_Participants"
+author: "Dana Swarbrick"
+date: "10/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Import libraries
+
+```{r libraries}
+packages = c("tidyverse", "psych", "readxl")
+
+## Now load or install&load all
+package.check <- lapply(
+  packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+
+```
+
+## Import data
+
+```{r dansk-files}
+setwd('../experimental-data/surveys/')
+filenames <- list.files(pattern="*Dansk.xlsx", full.names=TRUE)
+ldf<-lapply(filenames, read_xlsx)
+for (i in 1:length(ldf))
+  assign(paste("dansk.df", i, sep=""), ldf[[i]])
+```
+```{r english-files}
+setwd('../experimental-data/surveys/')
+filenames <- list.files(pattern="*English.xlsx", full.names=TRUE)
+ldf<-lapply(filenames, read_xlsx)
+for (i in 1:length(ldf))
+  assign(paste(paste("english.df", i, sep="")), ldf[[i]])
+```
+## Tidy & Rename
+To avoid needing to do this 2x, will just combine english and danish surveys here. 
+
+```{r}
+
+```
+
+
+### Rename cols
+
+#### Q1: Pre-concert Survey
+```{r}
+q1<-names(english.df1)
+q1id<-c("NR", "userID", "city", "viewing_with_others", "age", "gender", "musician_status", "personal_relation", "fan", "EC_1", "EC_2", "EC_3", "EC_4", "EC_5", "EC_6", "EC_7","Elapsed_time", "language")
+codebook1<-cbind(q1id,q1)
+
+# Rename cols based on codes
+names(english.df1)<-q1id
+```
+
+#### Q2, Q3, Q5: After Beethoven, Schnittke, Folk
+```{r}
+q2<-names(english.df2)
+q3<-names(english.df3)
+q5<-names(english.df5)
+```
+
+##### Check to make sure that the questions actually are all the same and in the same order
+```{r}
+q2==q3
+q2[q2!=q3]
+q3[q2!=q3]
+q3==q5
+q3[q5!=q3]
+q5[q5!=q3]
+
+qtest<-data.frame(cbind(q2,q3,q5))
+#Looks good - just one inconsistency in wording.
+```
+
+```{r}
+q2id<-c("NR", 
+        "userID",
+        "tears",
+        "chills",
+        "warm_feeling",
+        "choked_up",
+        "refreshed",
+        "welcoming",
+        "closeness",
+        "positive",
+        "negative", 
+        "tense",
+        "relaxed",
+        "alone",
+        "untouched",
+        "moved",
+        "touched",
+        "admiration",
+        "presence_grand",
+        "greater_than_myself",
+        "jaw_drop",
+        "gasped",
+        "challenge_process",
+        "hard_comprehend",
+        "others_moved",
+        "connected_musicians",
+        "connected_audience_streaming",
+        "connected_audience_attending",
+        "enjoy",
+        "familiar",
+        "own_world",
+        "absorbed_music",
+        "daydream",
+        "sense_time",
+        "distracted",
+        "attentive",
+        "attention_others",
+        "attention_sensations",
+        "positively_transformed",
+        "negatively_transformed",
+        "aware_body",
+        "aware_movement",
+        "aware_others_moving",
+        "Elapsed_time")
+
+codebook2<-cbind(q2id, q2) #don't need to repeat for 3 or 5
+```
+
+##### Rename cols in surveys
+Since you hecked, you can rename surveys q3 and q5 in the same way as well
+
+```{r}
+names(english.df2)<-q2id
+names(english.df3)<-q2id
+names(english.df5)<-q2id
+```
+
+#### Q4: Bach
+
+```{r}
+q4<-names(english.df4)
+print(q4)
+```
+```{r}
+q4id<-c("NR",
+       "userID",
+       "perceive",
+       "instruments",
+       "understanding",
+       "augment",
+       "disturb",
+       "enhance", 
+       "emotionally_moved",
+       "familiar",
+       "style", 
+       "aware_body",
+       "aware_movement",
+       "aware_others_moving",
+       "Elapsed_time")
+
+codebook3<-cbind(q4id, q4)
+
+names(english.df4)<-q4id
+```
+
+#### Q6: After Concert Survey
+```{r}
+q6<-names(english.df6)
+print(q6)
+```
+```{r}
+q6id<-c("NR",
+       "userID",
+       "phone_loc",
+       "aware_recording",
+       "changed_behaviour",
+       "Engage_1",
+      "Engage_2",
+      "Engage_3",
+      "Engage_4",
+      "Vis_Stim_1",
+      "Vis_Stim_2",
+      "Vis_Stim_3",
+      "Vis_Stim_4",
+      "Absorb_1",
+      "Absorb_2",
+      "Absorb_3",
+      "Absorb_4",
+      "Touch_1",
+      "Touch_2",
+      "Touch_3",
+      "Touch_4",
+      "AIMS_1",
+      "AIMS_2",
+      "AIMS_3",
+      "AIMS_4",
+      "AIMS_5",
+      "AIMS_6",
+      "AIMS_7",
+      "AIMS_8",
+      "AIMS_9",
+      "AIMS_10",
+      "AIMS_11",
+      "AIMS_12",
+      "AIMS_13",
+      "AIMS_14",
+      "AIMS_15",
+      "AIMS_16",
+      "AIMS_17",
+      "AIMS_18",
+      "AIMS_19",
+      "AIMS_20",
+      "AIMS_21",
+      "AIMS_22",
+      "AIMS_23",
+      "AIMS_24",
+      "AIMS_25",
+      "AIMS_26",
+      "AIMS_27",
+      "AIMS_28",
+      "AIMS_29",
+      "AIMS_30",
+      "AIMS_31",
+      "AIMS_32",
+      "AIMS_33",
+      "AIMS_34",
+      "Comments",
+      "Elapsed_time")
+
+codebook4<-cbind(q6id, q6)
+
+names(english.df6)<-q6id
+```
+
+## Pre-processing
+Go through the surveys and create the combined measures including:
+* empathic concern 
+* Kama Muta 
+* awe scale
+* Absorption Scale
+* AIMS
+
+### Empathic Concern Scale
+```{r}
+english.df1%>%
+```
+
+```{r Empathic_Concern}
+EC<-subset(surveydata, select = c(EC_1, EC_2, EC_3, EC_4, EC_5, EC_6, EC_7))
+# reverse score the reversed items
+columnsToReverse<-c("EC_2","EC_5","EC_6")
+EC_R<-EC # make duplicate to check reverse scoring with
+EC_R[,columnsToReverse]<-6-EC_R[,columnsToReverse]
+#create avg value
+surveydata$AvgEC<-rowMeans(EC_R, na.rm=TRUE)
+```
+
+### Kama Muta Scale (KAMMUS-S US)
+The International Kama Muta scale was validated across 19 countries and includes the KAMMUS-2, a 22-24 item scale, instead of the 50 item version (Zickfeld, 2019).
+The authors recommend that the scores of the 5 aspects should not be averaged but instead, a high score across all 5 aspects would be indicative of people experiencing this distinct social-relational emotion.
+
+The 5 Aspects of Being Moved Experiences are:
+1.Valence
+2. Physical sensations
+3. Motivation or action tendencies
+4. Appraisal patterns
+5. Labels (words used to describe kama muta - vary by culture/language. e.g. English: being moved or being touched)
+
+However, author BS, expert on Kama Muta suggested doing a reliability analysis across all items of the short scale and averaging them if the reliability score was satisfactory.
+
+
+
+## MOVED FROM ABOVE
+### Add id to duplicate questions
+If want each participant to have only one row to enable certain analyses, will need to add a prefix or suffix to colnames to diffrentiate duplicated Qs bw q2, q3, and q5.
+
+### Combine
+
+```{r}
+english.df<-lapply(english.dfs, function(x) left_join(x, by = "userID"))
+```
+```{r}
+english.df<-bind_cols(english.dfs, .id = "")
+```
+
+```{r}
+multi_full<-Reduce(
+  function(x,y) merge(x, y, by= "userID", all = TRUE),
+  english.dfs2
+  )
+```
+
+### Add col to ID which survey they are from 
+```{r}
+english.df1["survey"]<-"Pre-concert"
+english.df2["survey"]<-"Beethoven"
+english.df3["survey"]<-"Schnittke"
+english.df4["survey"]<-"Bach"
+english.df5["survey"]<-"Folk"
+english.df6["survey"]<-"Post-concert"
+```
