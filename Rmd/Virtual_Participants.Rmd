@@ -405,6 +405,11 @@ df.full<-df.full%>%mutate_at(vars(matches("aware_others_moving")), function(x){f
 
 ## Pre-processing
 
+### create a new ID col
+```{r}
+df.full<-rowid_to_column(df.full, "Pt_ID")
+```
+
 ### Numeric
 ```{r}
 # Make a list of any responses that are not entirely numeric and convert to numeric by extracting the first character and then converting to numeric
@@ -461,19 +466,29 @@ Go through the surveys and create the combined measures including:
 #### Empathic Concern Scale
 Note: I checked the reverse scoring in both the paper survey and the online survey and it is correct. The order of questions in this survey was slightly different from the Quarantine Concerts experiment.
 ```{r}
-EC<-df.full%>%select(EC_1, EC_2, EC_3, EC_4, EC_5, EC_6, EC_7)
+EC.df<-df.full%>%select(group,EC_1, EC_2, EC_3, EC_4, EC_5, EC_6, EC_7)
 
 # reverse score the reversed items
 columnsToReverse<-c("EC_2","EC_4","EC_5")
-EC_R<-EC # make duplicate to check reverse scoring with
+EC_R<-EC.df # make duplicate to check reverse scoring with
 EC_R[,columnsToReverse]<-6-EC_R[,columnsToReverse]
 
+EC.dfEC<-EC.df%>%select(-group)
+EC_R<-EC_R%>%select(-group)
 # check alpha
 summary(psych::alpha(EC_R))$raw_alpha
-
+#summary(psych::alpha(EC.df))$raw_alpha # good. seems that reversing the cols helps and is detectable in alpha
 #create avg value
 df.full$EC<-rowMeans(EC_R, na.rm=TRUE)
 ```
+
+##### Try again with removing EC_6: I am often quite touched by things that I see happen.
+```{r}
+EC_R<-EC_R%>%select(-EC_6)
+#create avg value
+df.full$EC_noTouched<-rowMeans(EC_R, na.rm=TRUE)
+```
+
 
 #### AIMS
 Info on AIMS: https://smartlaboratory.org/resources/aims-scale/
@@ -577,9 +592,63 @@ print(summary(psych::alpha(AWE))$raw_alpha)
 df.full$AWE_Folk<-rowMeans(AWE, na.rm=TRUE)
 ```
 
+# Explore the Data
+## characterize demographics
+```{r}
+df.full%>%group_by(group)%>%count()
+```
+
+
+### Live
+```{r}
+df.full%>%
+  filter(group == "Live")%>%
+  select(gender, age, musician_status, personal_relation, fan, EC)%>%
+  summary(.)
+
+df.full%>%filter(group == "Live")%>%
+  select(musician_status)%>%
+  summary(.)
+
+# SD age
+df.full%>%filter(group=="Live")%>%summarise(mean(age, na.rm= TRUE), sd(age, na.rm= TRUE))
+  
+# SD fan
+df.full%>%filter(group=="Live")%>%summarise(mean(fan, na.rm= TRUE), sd(fan, na.rm= TRUE))
+
+# SD EC
+df.full%>%filter(group=="Live")%>%summarise(mean(EC, na.rm= TRUE), sd(EC, na.rm= TRUE))
+```
+### Virtual 
+```{r}
+df.full%>%
+  filter(group == "Virtual")%>%
+  select(gender, age, musician_status, personal_relation, fan, EC)%>%
+  summary(.)
+
+test<-df.full%>%filter(group == "Virtual")%>%
+  select(musician_status)%>%
+  summary(.)
+
+# SD age
+df.full%>%filter(group=="Virtual")%>%summarise(mean(age, na.rm= TRUE), sd(age, na.rm= TRUE))
+  
+# SD fan
+df.full%>%filter(group=="Virtual")%>%summarise(mean(fan, na.rm= TRUE), sd(fan, na.rm= TRUE))
+
+# SD EC
+df.full%>%filter(group=="Virtual")%>%summarise(mean(EC, na.rm= TRUE), sd(EC, na.rm= TRUE))
+
+# City list 
+txt<-df.full%>%select(city)%>%drop_na()
+write.table(txt, file = "city_wordcloud.txt", sep = "\t",
+            row.names = FALSE)
+```
 # Visualizations 
 Try KM and EC correlation, etc. Let's make some charts to test expected correlations.
-
+```{r}
+colours_DSQ<-c("#2d769a", "white","#b34036")
+```
 ### Are EC and KM related, as expected?
 There were no significant correlations in the virtual audience (n = 67) but there were significant correlations with the live audience (n = 91).
 ```{r}
@@ -596,6 +665,146 @@ df.full%>%
   chart.Correlation(method = "kendall")
 
 ```
+
+#### Try again with EC_6 removed (EC_noTouched)
+No change 
+```{r}
+df.full%>%count(group)
+
+df.full%>%
+  filter(group == "Live")%>%
+  select(EC_noTouched, contains('KM'))%>%
+  chart.Correlation(method = "kendall")
+
+df.full%>%
+  filter(group == "Virtual")%>%
+  select(EC_noTouched, contains('KM'))%>%
+  chart.Correlation(method = "kendall")
+
+```
+
+### How does connectedness fit in to this picture, regardless of piece
+```{r}
+dat<-df.full%>%select(Pt_ID, group, contains("connected"), contains("KM"), EC)
+
+virt.dat<-dat%>%filter(group == "Virtual")%>%
+  mutate(connected_audience_Beethoven = (connected_audience_streaming_Beethoven+connected_audience_attending_Beethoven)/2)%>%
+  mutate(connected_audience_Schnittke = (connected_audience_streaming_Schnittke+connected_audience_attending_Schnittke)/2)%>%
+  mutate(connected_audience_Folk = (connected_audience_streaming_Folk+connected_audience_attending_Folk)/2)
+  
+           
+live.dat<-dat%>%filter(group == "Live")
+
+df<-bind_rows(live.dat, virt.dat)%>%
+  select(-c(connected_audience_streaming_Beethoven,connected_audience_attending_Beethoven,connected_audience_streaming_Schnittke,connected_audience_attending_Schnittke, connected_audience_streaming_Folk, connected_audience_attending_Folk))
+
+#make long
+df.long<-df%>%pivot_longer(!c(group, Pt_ID, EC),
+                        names_to = c("question", "piece"),
+                        names_pattern ="(.*)_(.*)",
+                        values_to = "response")
+
+df.wide<-df.long%>%pivot_wider(names_from = question, values_from = response)
+
+df.wide%>%
+  filter(group =="Live")%>%
+  select(EC, KM,connected_musicians,connected_audience)%>%
+  chart.Correlation(method = "kendall")
+
+df.wide%>%
+  filter(group =="Virtual")%>%
+  select(EC, KM,connected_musicians,connected_audience)%>%
+  chart.Correlation(method = "kendall")
+```
+### Multiple comparison corrections
+NOTE: this revealed that the chart.correlations are very minimally different....maybe it would be different for a chart with many more variables?
+```{r}
+
+dat<-df.wide%>%filter(group == "Live")
+
+# choose correct vars
+corData<-dat%>%
+  select(Pt_ID, EC, KM, connected_musicians, connected_audience)
+
+#select only complete
+corData<-na.omit(corData)
+
+# check number of samples
+n<-length(unique(corData$Pt_ID))
+
+# remove pt_id
+corData<-corData%>%select(-Pt_ID)
+
+title = "Live - Empathy, Kama Muta, Connectedness"
+subtitle = paste0("Kendall Correlations (BH adj) (n = ", n, ")")
+
+# create corrected p-values
+corellation = adj.cor(corData, p.adjust = TRUE, p.adjust.method = "BH", threshold = 0.05, cor.method = "kendall")
+pval = corellation$adj.p.values  # shows the p.values in a matrix format
+thresR = corellation$threshold.r  # shows only the p value <0.05
+
+# convert to triangle
+thresR[lower.tri(thresR)]<- NA
+pval[lower.tri(pval)]<- NA
+#create melted values
+melted_cormat<-melt(thresR,value.name = "r")
+melted_pmat<-melt(pval, value.name = "p")
+corPlotData<-full_join(melted_cormat, melted_pmat, by = c("Var1", "Var2"))
+corPlotData$r[corPlotData$r==1]<-NA
+corPlotData.c<-na.omit(corPlotData)
+corPlotData.c$stars<-cut(corPlotData.c$p, breaks=c(-Inf, 0.001, 0.01, 0.05, Inf), label=c("***", "**", "*", ""))  # Create column of significance
+corPlotData.c$r<-round(corPlotData.c$r,2)
+
+# Create a ggheatmap
+ggheatmap <- ggplot(corPlotData.c, aes(Var2, Var1, fill = r))+
+  geom_tile(color = "white")+
+  scale_fill_gradientn(
+    colours = colours_DSQ,
+    limits = c(-1,1)
+  )+
+  theme_minimal()+ 
+  theme(axis.text.x = element_text(vjust = 1, hjust = 1, angle = 45, size = 6))+
+  theme(axis.text.y = element_text(size = 6))+
+  labs(title = title,
+       subtitle = subtitle)+
+  coord_fixed()
+
+print(ggheatmap)
+
+ggheatmap2<-ggheatmap+
+  geom_text(aes(Var2, Var1, label = paste(stars,r, sep ="\n")), color = "black", size = 3) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 8),
+    plot.subtitle = element_text(hjust = 0.5, size = 6),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.ticks = element_blank(),
+    legend.justification = c(1, 0),
+    legend.position = c(0.6, 0.8),
+    legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 5, barheight = 0.4,
+                               title.position = "top", title.hjust = 0.5, 
+                               title.theme = element_text(size = 5),
+                               label.theme = element_text(size = 5)))
+
+print(ggheatmap2)
+
+
+#cross.correlation(corData, colours_DSQ, title, subtitle) #moved the cross-correlation code to the useful_functions script to make this more tidy.but needed to change the font size for this particular chart.
+
+graphname<-paste0("../plots/Kendall-Correlations-", title, ".png")
+ggsave(graphname, 
+       width = 8, 
+       height = 8, 
+       units = 'cm', 
+       dpi = 500)
+
+```
+
+
 ###  Beethoven
 ```{r}
 df.full%>%
@@ -636,9 +845,6 @@ df.full%>%
 ```
 
 ## Cross-correlation
-```{r}
-colours_DSQ<-c("#2d769a", "white","#b34036")
-```
 
 ### Beethoven 
 Especially examine absorption's relation to other things. Remove vars that are represented in other vars like KM vars, AWE, and vars that are not numeric like the awareness ones. 
@@ -658,9 +864,12 @@ corData<-na.omit(corData)
 # check number of samples
 samples<-nrow(corData)
 
-title = "Beethoven-Live"
+title = "Beethoven Live"
 subtitle = paste0("Kendall Correlations (BH adj) (n = ", samples, ")")
 cross.correlation(corData, colours_DSQ, title, subtitle) #moved the cross-correlation code to the useful_functions script to make this more tidy.
+
+### quickly check if the values are the same with chart.correlation
+corData%>%select(-group)%>%chart.Correlation(method = "kendall") # no, less items are shown as significant with the multiple comparison corrections even though the correlation values are the same, it is the p-value being adjusted. 
 
 graphname<-paste0("../plots/Kendall-Correlations-", title, ".png")
 ggsave(graphname, 
@@ -686,7 +895,7 @@ corData<-na.omit(corData)
 # check number of samples
 samples<-nrow(corData)
 
-title = "Beethoven-Virtual" # UPDATE
+title = "Beethoven Virtual" # UPDATE
 subtitle = paste0("Kendall Correlations (BH adj) (n = ", samples, ")")
 cross.correlation(corData, colours_DSQ, title, subtitle) #moved the cross-correlation code to the useful_functions script to make this more tidy.
 
@@ -704,11 +913,12 @@ ggsave(graphname,
 ```{r}
 corData<-df.full%>% # without including the KM vars, awe vars, and aware vars
   filter(group == "Live")%>%
-  select(EC, fan, group, contains('Schnittke'))%>%
+  select(ID,EC, fan, group, contains('Schnittke'))%>%
   select(-contains(c('tears','chills','warm_feeling','choked_up','refreshed','welcoming','closeness','moved','touched')))%>% # remove kama muta vars except for  "positive" because I want to see the positive versus negative association and I don't want to remove the positively transformed one. 
   select(-contains(c('presence_grand','greater_than_myself','jaw_drop','gasped','challenge_process','hard_comprehend')))%>%
   select(-contains('aware'))%>%# because these are factors (but could actually be converted to ordinal)
-  select(-contains('connected')) # because the connected measure needs to be re-worked a little
+  select(-contains('connected'))%>% # because the connected measure needs to be re-worked a little
+  select(-contains('relaxed')) # because this was forgotten in the English survey
 
 #select only complete
 corData<-na.omit(corData)
@@ -716,7 +926,7 @@ corData<-na.omit(corData)
 # check number of samples
 samples<-nrow(corData)
 
-title = "Schnittke-Live"
+title = "Schnittke Live"
 subtitle = paste0("Kendall Correlations (BH adj) (n = ", samples, ")")
 cross.correlation(corData, colours_DSQ, title, subtitle) #moved the cross-correlation code to the useful_functions script to make this more tidy.
 
@@ -744,7 +954,7 @@ corData<-na.omit(corData)
 # check number of samples
 samples<-nrow(corData)
 
-title = "Schnittke-Virtual" # UPDATE
+title = "Schnittke Virtual" # UPDATE
 subtitle = paste0("Kendall Correlations (BH adj) (n = ", samples, ")")
 cross.correlation(corData, colours_DSQ, title, subtitle) #moved the cross-correlation code to the useful_functions script to make this more tidy.
 
@@ -765,7 +975,8 @@ corData<-df.full%>% # without including the KM vars, awe vars, and aware vars
   select(-contains(c('tears','chills','warm_feeling','choked_up','refreshed','welcoming','closeness','moved','touched')))%>% # remove kama muta vars except for  "positive" because I want to see the positive versus negative association and I don't want to remove the positively transformed one. 
   select(-contains(c('presence_grand','greater_than_myself','jaw_drop','gasped','challenge_process','hard_comprehend')))%>%
   select(-contains('aware'))%>%# because these are factors (but could actually be converted to ordinal)
-  select(-contains('connected')) # because the connected measure needs to be re-worked a little
+  select(-contains('connected'))%>% # because the connected measure needs to be re-worked a little
+  select(-contains('relaxed')) # because this was forgotten in the English survey
 
 #select only complete
 corData<-na.omit(corData)
@@ -773,7 +984,7 @@ corData<-na.omit(corData)
 # check number of samples
 samples<-nrow(corData)
 
-title = "Folk-Live"
+title = "Folk Live"
 subtitle = paste0("Kendall Correlations (BH adj) (n = ", samples, ")")
 cross.correlation(corData, colours_DSQ, title, subtitle) #moved the cross-correlation code to the useful_functions script to make this more tidy.
 
@@ -801,7 +1012,7 @@ corData<-na.omit(corData)
 # check number of samples
 samples<-nrow(corData)
 
-title = "Folk-Virtual" # UPDATE
+title = "Folk Virtual" # UPDATE
 subtitle = paste0("Kendall Correlations (BH adj) (n = ", samples, ")")
 cross.correlation(corData, colours_DSQ, title, subtitle) #moved the cross-correlation code to the useful_functions script to make this more tidy.
 
@@ -815,7 +1026,7 @@ ggsave(graphname,
 
 ## Prelim Bach Visualization findings
 ```{r}
-Title = "Visualization_Items"
+Title = "Visualization"
 
 dat<-df.full%>%
   select(EC, group, fan, perceive:style)
@@ -829,10 +1040,13 @@ Subtitle = paste0("n live = ", c$n[c$group =="Live"], "; n virtual = ", c$n[c$gr
 dat_long<-dat%>%
   pivot_longer(!c(EC, group, fan), names_to = "question", values_to = "response")
 
+dat_long$question[dat_long$question == "emotionally_moved"]<-"moved"
+
 dat_long%>%ggplot(aes(fill = group,x = question, y = response))+
   geom_boxplot()+
   labs(title=Title,
-       subtitle = Subtitle)#+
+       subtitle = Subtitle)+
+  theme_DSQ()
   #geom_dotplot(binaxis='y', stackdir='center', dotsize=1)+
   #geom_boxplot(width = 0.1, fill = "white")
 
@@ -865,7 +1079,7 @@ ggsave(graphname,
 absorb.items<-c("own_world", "absorbed_music", "daydream", "sense_time", "distracted", "attentive", "attention_others","attention_sensations", "transformed")
 
 absorb<-df.full%>%
-  select(group, contains(absorb.items))
+  select(group, Pt_ID, contains(absorb.items))
 
 absorb.long<-absorb%>%pivot_longer(!group,
                         names_to = c("question", "piece"),
@@ -875,10 +1089,11 @@ absorb.long<-absorb%>%pivot_longer(!group,
 
 ### Beethoven
 ```{r}
-Title = "Absorption_Beethoven"
+Title = "Absorption Beethoven"
 
 absorb.beethoven<-absorb.long%>%
-  filter(piece == "Beethoven")
+  filter(piece == "Beethoven")%>%
+  drop_na()
 
 c<-absorb.beethoven%>%
   group_by(group)%>%
@@ -890,12 +1105,15 @@ Subtitle = paste0("n live = ~", round(c$n[c$group =="Live"]/length(absorb.items)
 absorb.beethoven%>%ggplot(aes(fill = group,x = question, y = response))+
   geom_boxplot()+
   labs(title=Title,
-       subtitle = Subtitle)#+
+       subtitle = Subtitle)+
+  theme_DSQ()+
+  theme(axis.text.x = element_text(vjust = 1, hjust = 1, angle = 45))
+
 
 graphname<-paste0("../plots/",Title, ".png")
 ggsave(graphname, 
        width = 20, 
-       height = 9, 
+       height = 13, 
        units = 'cm', 
        dpi = 500)
 
@@ -916,10 +1134,12 @@ ggsave(graphname,
 
 ### Schnittke
 ```{r}
-Title = "Absorption_Schnittke"
+Title = "Absorption Schnittke"
 
 absorb.schnittke<-absorb.long%>%
-  filter(piece == "Schnittke")
+  filter(piece == "Schnittke")%>%
+  drop_na()%>%
+  filter(response<7)
 
 c<-absorb.schnittke%>%
   group_by(group)%>%
@@ -931,12 +1151,14 @@ Subtitle = paste0("n live = ~", round(c$n[c$group =="Live"]/length(absorb.items)
 absorb.schnittke%>%ggplot(aes(fill = group,x = question, y = response))+
   geom_boxplot()+
   labs(title=Title,
-       subtitle = Subtitle)#+
+       subtitle = Subtitle)+
+  theme_DSQ()+
+  theme(axis.text.x = element_text(vjust = 1, hjust = 1, angle = 45))
 
 graphname<-paste0("../plots/",Title, ".png")
 ggsave(graphname, 
        width = 20, 
-       height = 9, 
+       height = 13, 
        units = 'cm', 
        dpi = 500)
 
@@ -958,10 +1180,11 @@ ggsave(graphname,
 
 ### Folk
 ```{r}
-Title = "Absorption_Folk"
+Title = "Absorption Folk"
 
 absorb.folk<-absorb.long%>%
-  filter(piece == "Folk")
+  filter(piece == "Folk")%>%
+  drop_na()
 
 c<-absorb.folk%>%
   group_by(group)%>%
@@ -973,12 +1196,14 @@ Subtitle = paste0("n live = ~", round(c$n[c$group =="Live"]/length(absorb.items)
 absorb.folk%>%ggplot(aes(fill = group,x = question, y = response))+
   geom_boxplot()+
   labs(title=Title,
-       subtitle = Subtitle)#+
+       subtitle = Subtitle)+
+  theme_DSQ()+
+  theme(axis.text.x = element_text(vjust = 1, hjust = 1, angle = 45))
 
 graphname<-paste0("../plots/",Title, ".png")
 ggsave(graphname, 
        width = 20, 
-       height = 9, 
+       height = 13, 
        units = 'cm', 
        dpi = 500)
 
