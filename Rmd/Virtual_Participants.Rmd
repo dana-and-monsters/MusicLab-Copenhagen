@@ -399,7 +399,7 @@ check<-df.full%>%select(matches("aware_body"))
 df.full<-df.full%>%mutate_at(vars(matches("aware_movement")), function(x){fct_collapse(x, "Not aware of movement" = c("1", "Not aware of movement", "Ikke opmærksom på bevægelse"),"Yes and I moved less than usual"= c("2", "Yes and I moved less than usual", "Ja, og jeg bevægede mig mindre end normalt"), "Yes and I moved a normal amount" = c("3", "Yes and I moved a normal amount", "Ja, og jeg bevægede mig som jeg normalt ville have gjort"),"Yes and I moved more than usual" = c("4", "Yes and I moved more than usual", "Ja, og jeg bevægede mig mere end normalt"))})
 
 # factor aware_others_moving
-df.full<-df.full%>%mutate_at(vars(matches("aware_others_moving")), function(x){fct_collapse(x, "Not aware of others' movement" = c("1", "Not aware of others&#39; movement", "Ikke opmærksom på andres bevægelse"),"Yes and they moved less than usual"= c("2", "Yes and they moved less than usual"), "Yes and they moved a normal amount" = c("3", "Yes and they moved a normal amount", "Ja, og de bevægede sig som de normalt ville have gjort"),"Yes and they moved more than usual" = c("4", "Yes and they moved more than usual"))})
+df.full<-df.full%>%mutate_at(vars(matches("aware_others_moving")), function(x){fct_collapse(x, "Not aware of others' movement" = c("1", "Not aware of others&#39; movement", "Not aware of others’ movement","Not aware of others' movement", "Ikke opmærksom på andres bevægelse"),"Yes and they moved less than usual"= c("2", "Yes and they moved less than usual"), "Yes and they moved a normal amount" = c("3", "Yes and they moved a normal amount", "Ja, og de bevægede sig som de normalt ville have gjort"),"Yes and they moved more than usual" = c("4", "Yes and they moved more than usual"))})
 
 ```
 
@@ -846,6 +846,84 @@ df.full%>%
 
 ## Cross-correlation
 
+### Regardless of piece
+```{r}
+
+dat<-df.full%>%
+  select(-contains(c('tears','chills','warm_feeling','choked_up','refreshed','welcoming','closeness','moved','touched')))%>% # remove kama muta vars except for  "positive" because I want to see the positive versus negative association and I don't want to remove the positively transformed one. 
+  select(-contains(c('presence_grand','greater_than_myself','jaw_drop','gasped','challenge_process','hard_comprehend')))%>% # remove awe vars
+  select(-contains('aware'))# because these are factors (but could actually be converted to ordinal)
+
+virt.dat<-dat%>%filter(group == "Virtual")%>%
+  mutate(connected_audience_Beethoven = (connected_audience_streaming_Beethoven+connected_audience_attending_Beethoven)/2)%>%
+  mutate(connected_audience_Schnittke = (connected_audience_streaming_Schnittke+connected_audience_attending_Schnittke)/2)%>%
+  mutate(connected_audience_Folk = (connected_audience_streaming_Folk+connected_audience_attending_Folk)/2)
+  
+           
+live.dat<-dat%>%filter(group == "Live")
+
+df<-bind_rows(live.dat, virt.dat)%>%
+  select(-c(connected_audience_streaming_Beethoven,connected_audience_attending_Beethoven,connected_audience_streaming_Schnittke,connected_audience_attending_Schnittke, connected_audience_streaming_Folk, connected_audience_attending_Folk))
+  
+cor.df<-df%>%select(group, Pt_ID, EC, AIMS, fan, positive_Beethoven:negatively_transformed_Schnittke, positive_Folk:negatively_transformed_Folk, KM_Beethoven: AWE_Folk)
+
+#make long
+df.long<-cor.df%>%pivot_longer(!c(group, Pt_ID, EC, AIMS, fan),
+                        names_to = c("question", "piece"),
+                        names_pattern ="(.*)_(.*)",
+                        values_to = "response")
+
+df.wide<-df.long%>%pivot_wider(names_from = question, values_from = response)
+
+df.wide<-df.wide%>%
+  filter(group =="Live")%>%
+  select(-c(group,Pt_ID))
+
+#  chart.Correlation(method = "kendall")
+
+#select only complete
+corData<-na.omit(df.wide)
+
+# check number of samples
+samples<-nrow(corData)
+
+title = "Live (Regardless of Piece)" # UPDATE
+subtitle = paste0("Kendall Correlations (BH adj) (n = ", samples, ")")
+cross.correlation(corData, colours_DSQ, title, subtitle) #moved the cross-correlation code to the useful_functions script to make this more tidy.
+
+graphname<-paste0("../plots/Kendall-Correlations-", title, ".png")
+ggsave(graphname, 
+       width = 10, 
+       height = 10, 
+       units = 'cm', 
+       dpi = 500)
+
+df.wide<-df.wide%>%
+  filter(group =="Virtual")%>%
+  select(-c(group,Pt_ID))
+
+#  chart.Correlation(method = "kendall")
+
+#select only complete
+corData<-na.omit(df.wide)
+
+# check number of samples
+samples<-nrow(corData)
+
+title = "Virtual (Regardless of Piece)" # UPDATE
+subtitle = paste0("Kendall Correlations (BH adj) (n = ", samples, ")")
+cross.correlation(corData, colours_DSQ, title, subtitle) #moved the cross-correlation code to the useful_functions script to make this more tidy.
+
+graphname<-paste0("../plots/Kendall-Correlations-", title, ".png")
+ggsave(graphname, 
+       width = 10, 
+       height = 10, 
+       units = 'cm', 
+       dpi = 500)
+
+```
+
+
 ### Beethoven 
 Especially examine absorption's relation to other things. Remove vars that are represented in other vars like KM vars, AWE, and vars that are not numeric like the awareness ones. 
 #### Live
@@ -1222,4 +1300,82 @@ ggsave(graphname,
        dpi = 500)
 ```
 
-## SOMETHING IS WRONG WITH THE COUNTING AND SUBTITLE! TRY TO FIX!
+## Aware of movement
+add a little overview on responses to Finn's Qs of interest across the 3 pieces.
+
+```{r}
+aware.items<-c("aware_body", "aware_movement", "aware_others_moving")
+aware<-df.full%>%
+  select(group, Pt_ID, contains(aware.items))
+
+aware<-aware%>%rename(aware_body_Bach = aware_body,
+                      aware_movement_Bach = aware_movement,
+                      aware_others_moving_Bach = aware_others_moving)
+
+aware.long<-aware%>%pivot_longer(!c(group,Pt_ID),
+                        names_to = c("question", "piece"),
+                        names_pattern ="(.*)_(.*)",
+                        values_to = "response")
+
+aware.long$piece<-factor(aware.long$piece, levels = c("Beethoven", "Schnittke", "Bach", "Folk")) #factor for the correct facet order
+
+## AWARE BODY
+aware_body.long<-aware.long%>%filter(question == "aware_body")%>%filter(response %in% c("Not at all", "Rarely", "Intermittently", "Continuously"))
+
+Title = "Aware Body"
+
+ggplot(aware_body.long, aes(x = response, fill = group))+
+  geom_histogram( stat = "count", position= position_dodge(preserve = "single"))+
+  labs(title = Title)+
+  theme_minimal()+
+  theme(axis.text.x = element_text(vjust = 1, hjust = 1, angle = 45, size = 6))+
+  facet_grid(piece ~ group)
+
+graphname<-paste0("../plots/Histogram ",Title, ".png")
+ggsave(graphname, 
+       width = 11, 
+       height = 13, 
+       units = 'cm', 
+       dpi = 500)
+
+## AWARE MOVEMENT
+aware_movement.long<-aware.long%>%filter(question == "aware_movement")%>%drop_na()%>%filter(!response %in% c("1.5"))
+
+Title = "Aware Movement"
+
+ggplot(aware_movement.long, aes(x = response, fill = group))+
+  geom_histogram( stat = "count", position= position_dodge(preserve = "single"))+
+  labs(title = Title)+
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 15))+
+  theme_minimal()+
+  theme(axis.text.x = element_text(vjust = 1, hjust = 1, angle = 45, size = 6))+
+  facet_grid(piece ~ group)
+
+graphname<-paste0("../plots/Histogram ",Title, ".png")
+ggsave(graphname, 
+       width = 11, 
+       height = 13, 
+       units = 'cm', 
+       dpi = 500)
+
+## AWARE OTHERS MOVING
+aware_others_movement.long<-aware.long%>%filter(question == "aware_others_moving")%>%drop_na()
+
+Title = "Aware Others Moving"
+
+ggplot(aware_others_movement.long, aes(x = response, fill = group))+
+  geom_histogram( stat = "count", position= position_dodge(preserve = "single"))+
+  labs(title = Title)+
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+
+  theme_minimal()+
+  theme(axis.text.x = element_text(vjust = 1, hjust = 1, angle = 45, size = 6))+
+  facet_grid(piece ~ group)
+
+graphname<-paste0("../plots/Histogram ",Title, ".png")
+ggsave(graphname, 
+       width = 11, 
+       height = 13, 
+       units = 'cm', 
+       dpi = 500)
+```
+
