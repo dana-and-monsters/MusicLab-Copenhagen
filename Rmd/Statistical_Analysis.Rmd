@@ -1,0 +1,162 @@
+---
+title: "Statistical Analysis"
+author: "Dana Swarbrick"
+date: "24/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Live versus Livestreamed: Do people in the live concert feel more connected than people watching a virtual concert?
+IV: live versus virtual
+DV: connectedness (ordinal)
+
+## First let's look at raw data
+```{r}
+df.long%>%filter(question == "connected_musicians")%>%
+  ggplot(aes(x = group, y = response, fill = group))+
+    geom_dotplot(binaxis = "y", stackdir = "center", position = "dodge", dotsize = 0.45)
+
+df.long%>%filter(question == "connected_musicians")%>%
+  ggplot(aes(x = group, y = response, fill = group))+
+    geom_violin()
+```
+
+```{r}
+Title = "Connectedness"
+
+ggplot(df.long, aes(x = question, y = response, fill = group))+
+  geom_boxplot(position= position_dodge(preserve = "single"))+
+  labs(title = Title)+
+  scale_x_discrete(labels =  function(x) str_wrap(str_replace_all(x, "_", " "), width = 15))+
+  theme_minimal()+
+  theme(axis.text.x = element_text(vjust = 1, hjust = 1, angle = 45, size = 6))+
+  facet_grid(piece ~ .)
+
+
+graphname<-paste0("../plots/Boxplot ",Title, ".png")
+ggsave(graphname, 
+       width = 13, 
+       height = 13, 
+       units = 'cm', 
+       dpi = 500)
+
+# position dodge does not work for violin plots so I could make two separate for audience and musicians
+df.long%>%filter(grepl("audience", question))%>%
+  ggplot(aes(x = question, y = response, fill = group))+
+    geom_violin()+
+    labs(title = Title)+
+    scale_x_discrete(labels =  function(x) str_wrap(str_replace_all(x, "_", " "), width = 15))+
+    theme_minimal()+
+    theme(axis.text.x = element_text(vjust = 1, hjust = 1, angle = 45, size = 6))+
+    facet_grid(piece ~ .)
+
+df.long%>%filter(grepl("musicians", question))%>%
+  ggplot(aes(x = question, y = response, fill = group))+
+    geom_violin()+
+    labs(title = Title)+
+    scale_x_discrete(labels =  function(x) str_wrap(str_replace_all(x, "_", " "), width = 15))+
+    theme_minimal()+
+    theme(axis.text.x = element_text(vjust = 1, hjust = 1, angle = 45, size = 6))+
+    facet_grid(piece ~ .)
+
+```
+
+## Now let's run some stats
+IV: live versus virtual; audience vs musicians?
+DV: connectedness (ordinal)
+```{r}
+dat<-df.full%>%select(Pt_ID, group, contains("connected"))
+
+virt.dat<-dat%>%filter(group == "Virtual")%>%
+  mutate(connected_audience_Beethoven = (connected_audience_streaming_Beethoven+connected_audience_attending_Beethoven)/2)%>%
+  mutate(connected_audience_Schnittke = (connected_audience_streaming_Schnittke+connected_audience_attending_Schnittke)/2)%>%
+  mutate(connected_audience_Folk = (connected_audience_streaming_Folk+connected_audience_attending_Folk)/2)
+
+
+live.dat<-dat%>%filter(group == "Live")
+
+df<-bind_rows(live.dat, virt.dat)%>%
+  select(-c(connected_audience_streaming_Beethoven,connected_audience_attending_Beethoven,connected_audience_streaming_Schnittke,connected_audience_attending_Schnittke, connected_audience_streaming_Folk, connected_audience_attending_Folk))
+
+#make long
+df.long<-df%>%pivot_longer(!c(group, Pt_ID),
+                        names_to = c("question", "piece"),
+                        names_pattern ="(.*)_(.*)",
+                        values_to = "response")
+
+df.long$piece<-factor(df.long$piece, levels = c("Beethoven", "Schnittke", "Bach", "Folk")) #factor for the correct facet order
+
+# what is the effect of group on connectedness?
+m1<-lm(response ~ group, data = df.long)
+summary(m1)
+
+m2<-lm(response ~ group+question, data = df.long)
+summary(m2)
+
+m3<-lm(response ~ group*question, data = df.long)
+summary(m3)
+
+m4<-lm(response ~ group + question + piece, data = df.long)
+summary(m4)
+
+aov(m1, m2, m3, m4)
+
+m1<-lmer(response ~ group + (1|Pt_ID), data = df.long)
+summary(m1)
+
+m2<-lmer(response ~ group+question, data = df.long)
+summary(m2)
+
+m3<-lm(response ~ group*question, data = df.long)
+summary(m3)
+
+m4<-lm(response ~ group + question + piece, data = df.long)
+summary(m4)
+
+
+```
+
+According to my stats textbook another option is a repeated measures anova
+
+```{r}
+library(ez)
+data<-df.long%>%drop_na()
+
+ezMod<-ezMixed(data = data, dv = .(response), random = .(Pt_ID), fixed = .(question, group)) # ezANOVA wasn't working with missing data
+summary(ezMod)
+print(ezMod$summary)
+```
+
+## tutorial from textbook.
+ch. 14. I think he is using the lme function from nlme package
+```{r}
+library(nlme)
+
+baseline<-lme(response ~ 1, random = ~1|Pt_ID/question/group, data = data, method = "ML") # ML = maximum likelihood estimate
+groupM<-update(baseline, .~. +group)
+questionM<-update(groupM, .~. +question)
+pieceM<-update(questionM, .~. +piece)
+group_question<-update(pieceM, .~. +group:question)
+group_piece<-update(group_question, .~. +group:piece)
+question_piece<-update(group_piece, .~. +question:piece)
+concertM<-update(question_piece, .~. +group:question:piece)
+
+anova(baseline, groupM, questionM, pieceM, group_question, group_piece, question_piece, concertM)
+
+summary(concertM)
+```
+
+## show interaction ofgroup and question
+```{r}
+d<-data%>%group_by(Pt_ID, group, question)%>%summarise(avg = mean(response))
+d%>%ggplot(aes(x = question, y = avg, fill = group))+
+  geom_boxplot()
+```
+
+## factorial repeated-measures designs as a GLM
+```{r}
+baseline<-lmer(response ~ 1 + (1|Pt_ID), data = df.long)
+```

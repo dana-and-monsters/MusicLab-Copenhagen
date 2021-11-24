@@ -1,0 +1,670 @@
+---
+title: "Data Preparation"
+author: "Dana Swarbrick"
+date: "10/11/2021"
+output: html_document
+---
+
+Note: originally this document was named "Virtual_Participants.Rmd" but it became the entire data preparation script.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Import libraries
+
+```{r libraries}
+packages = c("psych", "readxl", "magrittr", "reshape2","ggpubr", "ltm","janitor", "PerformanceAnalytics", "tidyverse", "lme4")
+
+## Now load or install&load all
+package.check <- lapply(
+  packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+
+source("useful_functions.R")
+```
+
+# Virtual Participants
+## Import data
+
+```{r dansk-files}
+setwd('../experimental-data/surveys/')
+filenames <- list.files(pattern="*Dansk.xlsx", full.names=TRUE)
+ldf<-lapply(filenames, read_xlsx)
+for (i in 1:length(ldf))
+  assign(paste("dansk.df", i, sep=""), ldf[[i]])
+```
+```{r english-files}
+setwd('../experimental-data/surveys/')
+filenames <- list.files(pattern="*English.xlsx", full.names=TRUE)
+ldf<-lapply(filenames, read_xlsx)
+for (i in 1:length(ldf))
+  assign(paste(paste("english.df", i, sep="")), ldf[[i]])
+```
+
+## Tidy & Rename
+To avoid repeating everything 2x, will just combine english and danish surveys here. 
+
+### Rename cols
+
+#### Q1: Pre-concert Survey
+```{r}
+q1<-names(english.df1)
+q1.dansk<-names(dansk.df1)
+q1id<-c("NR", "userID", "city", "viewing_with_others", "age", "gender", "musician_status", "personal_relation", "fan", "EC_1", "EC_2", "EC_3", "EC_4", "EC_5", "EC_6", "EC_7","Elapsed_time")
+codebook1<-cbind(q1id,q1, q1.dansk)
+
+# Rename cols based on codes
+names(english.df1)<-q1id
+names(dansk.df1)<-q1id
+```
+
+#### Q2, Q3, Q5: After Beethoven, Schnittke, Folk
+```{r}
+q2<-names(english.df2)
+q3<-names(english.df3)
+q5<-names(english.df5)
+
+q2.dansk<-names(dansk.df2)
+q3.dansk<-names(dansk.df3)
+q5.dansk<-names(dansk.df5)
+```
+
+##### Check to make sure that the questions actually are all the same and in the same order
+```{r}
+q2==q3
+q2[q2!=q3]
+q3[q2!=q3]
+q3==q5
+q3[q5!=q3]
+q5[q5!=q3]
+
+qtest<-data.frame(cbind(q2,q3,q5))
+#Looks good - just one inconsistency in wording.
+```
+##### And in danish
+```{r}
+q2.dansk==q3.dansk
+q2.dansk[q2.dansk!=q3.dansk]
+q3.dansk[q2.dansk!=q3.dansk]
+q3.dansk==q5.dansk
+q3.dansk[q5.dansk!=q3.dansk]
+q5.dansk[q5.dansk!=q3.dansk]
+```
+This shows that there are no discrepancies between the wording of the questions across the surveys.
+
+##### List of question IDs
+```{r}
+q2id<-c("NR", 
+        "userID",
+        "tears",
+        "chills",
+        "warm_feeling",
+        "choked_up",
+        "refreshed",
+        "welcoming",
+        "closeness",
+        "positive",
+        "negative", 
+        "tense",
+        "relaxed",
+        "alone",
+        "untouched",
+        "moved",
+        "touched",
+        "admiration",
+        "presence_grand",
+        "greater_than_myself",
+        "jaw_drop",
+        "gasped",
+        "challenge_process",
+        "hard_comprehend",
+        "others_moved",
+        "connected_musicians",
+        "connected_audience_streaming",
+        "connected_audience_attending",
+        "enjoy",
+        "familiar",
+        "own_world",
+        "absorbed_music",
+        "daydream",
+        "sense_time",
+        "distracted",
+        "attentive",
+        "attention_others",
+        "attention_sensations",
+        "positively_transformed",
+        "negatively_transformed",
+        "aware_body",
+        "aware_movement",
+        "aware_others_moving",
+        "Elapsed_time")
+```
+
+```{r}
+codebook2<-cbind(q2id, q2) #don't need to repeat for 3 or 5
+```
+
+##### Rename cols in surveys
+Since you checked, you can rename surveys q3 and q5 in the same way as well
+
+```{r}
+names(english.df2)<-q2id
+names(english.df3)<-q2id
+names(english.df5)<-q2id
+
+#and danish
+names(dansk.df2)<-q2id
+names(dansk.df3)<-q2id
+names(dansk.df5)<-q2id
+```
+
+#### Q4: Bach
+```{r}
+q4<-names(english.df4)
+q4.dansk<-names(dansk.df4)
+print(q4)
+```
+```{r}
+q4id<-c("NR",
+       "userID",
+       "perceive",
+       "instruments",
+       "understanding",
+       "augment",
+       "disturb",
+       "enhance", 
+       "emotionally_moved",
+       "familiar",
+       "style", 
+       "aware_body",
+       "aware_movement",
+       "aware_others_moving",
+       "Elapsed_time")
+
+codebook3<-cbind(q4id, q4, q4.dansk)
+
+names(english.df4)<-q4id
+names(dansk.df4)<-q4id
+```
+
+#### Q6: After Concert Survey
+```{r}
+q6<-names(english.df6)
+q6.dansk<-names(dansk.df6)
+```
+
+```{r}
+q6id<-c("NR",
+       "userID",
+       "phone_loc",
+       "aware_recording",
+       "changed_behaviour",
+       "Engage_1",
+      "Engage_2",
+      "Engage_3",
+      "Engage_4",
+      "Vis_Stim_1",
+      "Vis_Stim_2",
+      "Vis_Stim_3",
+      "Vis_Stim_4",
+      "Absorb_1",
+      "Absorb_2",
+      "Absorb_3",
+      "Absorb_4",
+      "Touch_1",
+      "Touch_2",
+      "Touch_3",
+      "Touch_4",
+      "AIMS_1",
+      "AIMS_2",
+      "AIMS_3",
+      "AIMS_4",
+      "AIMS_5",
+      "AIMS_6",
+      "AIMS_7",
+      "AIMS_8",
+      "AIMS_9",
+      "AIMS_10",
+      "AIMS_11",
+      "AIMS_12",
+      "AIMS_13",
+      "AIMS_14",
+      "AIMS_15",
+      "AIMS_16",
+      "AIMS_17",
+      "AIMS_18",
+      "AIMS_19",
+      "AIMS_20",
+      "AIMS_21",
+      "AIMS_22",
+      "AIMS_23",
+      "AIMS_24",
+      "AIMS_25",
+      "AIMS_26",
+      "AIMS_27",
+      "AIMS_28",
+      "AIMS_29",
+      "AIMS_30",
+      "AIMS_31",
+      "AIMS_32",
+      "AIMS_33",
+      "AIMS_34",
+      "Comments",
+      "Elapsed_time")
+
+codebook4<-cbind(q6id, q6, q6.dansk)
+
+names(english.df6)<-q6id
+names(dansk.df6)<-q6id
+```
+
+### Label and combine English and Danish
+```{r}
+df.list = mget(paste0("english.df",1:6))
+dfs.english = lapply(df.list, function(df) select(df,c(-"NR", -"Elapsed_time")))
+df.list = mget(paste0("dansk.df",1:6))
+dfs.dansk = lapply(df.list, function(df) select(df,c(-"NR", -"Elapsed_time")))
+
+#explode list of dataframes to global vars
+list2env(dfs.english,globalenv())
+list2env(dfs.dansk,globalenv())
+
+# add language to df1 (demographic info)
+english.df1$language<-"English"
+dansk.df1$language<-"Danish"
+
+# Combine to larger dataframes
+df1<-bind_rows(english.df1, dansk.df1)
+df2<-bind_rows(english.df2, dansk.df2)
+df3<-bind_rows(english.df3, dansk.df3)
+df4<-bind_rows(english.df4, dansk.df4)
+df5<-bind_rows(english.df5, dansk.df5)
+df6<-bind_rows(english.df6, dansk.df6)
+
+```
+## Create a wide spreadsheet
+### Label the repeated measures labels
+```{r}
+colnames(df2)[2:ncol(df2)]<-paste0(colnames(df2)[2:ncol(df2)], '_Beethoven')
+colnames(df3)[2:ncol(df3)]<-paste0(colnames(df3)[2:ncol(df3)], '_Schnittke')
+colnames(df5)[2:ncol(df5)]<-paste0(colnames(df5)[2:ncol(df5)], '_Folk')
+```
+
+### Combine into a wide spreadsheet
+```{r}
+df<-full_join(df1, df2, by ="userID")
+df<-full_join(df, df3, by ="userID")
+df<-full_join(df, df4, by ="userID")
+df<-full_join(df, df5, by ="userID")
+df<-full_join(df, df6, by ="userID")
+```
+
+## Data Cleaning
+### Remove testing 
+I believe that the first 5 rows are just garbage/testing from before the concert
+```{r}
+df<-df%>%slice(6:nrow(df))
+
+## Remove duplicate rows
+df<-df%>% distinct()
+
+### Continue to find and remove duplicates
+# 1) Find rows that have the same userID as another row
+duplicates<-df%>%
+  group_by(userID)%>%
+  filter(n() > 1)
+#2) Check how many NAs are in each duplicate row
+duplicates$nacount<- rowSums( !is.na(duplicates))
+
+#3) Choose the rows with the highest number of non-NAs
+dedup<-duplicates%>%group_by(userID)%>%
+  slice(which.max(nacount))
+
+#4) Replace these rows in the original dataframe
+df<-df%>%filter(!userID %in% duplicates$userID)
+dedup<-dedup%>%select(-nacount) # remove the nacount col
+df<-df%>%bind_rows(dedup)
+```
+
+# Live Participants
+
+## Format table
+What format do these need to be in to allow cbind with the virtual surveys?
+```{r paper-surveys}
+setwd('../experimental-data/')
+paper<-read_xlsx("Data_Paper_Surveys.xlsx")
+```
+
+```{r}
+headers<-paper[1,]
+headers[1,15:54]<-lapply(headers[1,15:54], function(x) paste0(x,"_Beethoven"))
+headers[1,55:94]<-lapply(headers[1,55:94], function(x) paste0(x,"_Schnittke"))
+headers[1,107:146]<-lapply(headers[1,107:146], function(x) paste0(x,"_Folk"))
+
+headers<-unlist(headers)
+
+# keep organizing the new dataframe and then  a full join or inner join should work to reveal what is missing
+setwd('../experimental-data/')
+live.df<-read_xlsx("Data_Paper_Surveys.xlsx", sheet = 1, skip = 2, col_names = headers, col_types="text")
+
+# convert "NA" to real NA
+live.df[live.df=="NA"]=NA
+
+# add language column
+live.df<-live.df%>%
+  mutate(language = ifelse(startsWith(ID, "DSQd"), "Danish", "English")) # check<-live.df%>%select(ID,language) # double checked and it works 
+
+# prepare for factoring musician status --> when pts checked off multipleboxes, this was averaged but for categorizing them we need to put them into a single categoruy so we could simply round I guess...
+live.df$musician_status<-as.character(round(as.numeric(live.df$musician_status), digits = 0)) # rounded the number to nearest whole number
+
+```
+
+## Conduct a join to see which col names need to be changed
+Also import all cols as char to enable the join with the df.
+```{r}
+live.df$group<-"Live"
+df$group<-"Virtual"
+
+# Check for differences before joining
+test.df<-compare_df_cols(live.df, df) # looks great! (this helped me catch the language col issue and some other things)
+```
+
+
+
+```{r}
+df.full<-full_join(live.df, df)
+```
+
+## Translations and factor
+Factor these vars so that it will convert the norsk to the english
+```{r}
+df.full$gender<-fct_collapse(df.full$gender, Man = c("Man", "Mand", "1"), Woman = c("Woman", "Kvinde", "2", Not_Identify = c("Choose not to Identify", "3"), Other = c("Other", "4") ))
+
+df.full$musician_status<-fct_collapse(df.full$musician_status,"Tone-deaf" = c("1", "Tone-deaf", "Tonedøv"), "Nonmusician" = c("2", "Nonmusician", "Ikke-musiker"), "Music-loving nonmusician" = c("3", "Music-loving nonmusician", "Musikelskende ikke-musiker"), "Amateur musician" = c("4", "Amateur musician", "Amatørmusiker"), "Serious amateur musician" = c("5", "Serious amateur musician", "Seriøs amatørmusiker"), "Semiprofessional musician"= c("6", "Semiprofessional musician", "Semiprofessionel musiker"), "Professional musician" = c("7", "Professional musician", "Professionel musiker"))
+
+df.full$personal_relation<-fct_collapse(df.full$personal_relation, No_Relation = c("0","I don’t have any particular relation to them", "Jeg har ikke nogen bestemt relation"), Relative_Friend = c("1", "I am a relative/friend", "Jeg er en ven/familie"))
+
+# factor aware_body
+df.full<-df.full%>%mutate_at(vars(matches("aware_body")), function(x){fct_collapse(x, "Not at all" = c("1", "Not at all"), "Rarely" = c("2", "Rarely", "Sjældent"), "Intermittently" = c("3", "Intermittently", "Fra tid til anden"), "Continuously" = c("4", "Continuously", "Hele tiden"))})
+check<-df.full%>%select(matches("aware_body"))
+
+# factor aware_movement
+df.full<-df.full%>%mutate_at(vars(matches("aware_movement")), function(x){fct_collapse(x, "Not aware of movement" = c("1", "Not aware of movement", "Ikke opmærksom på bevægelse"),"Yes and I moved less than usual"= c("2", "1.5", "Yes and I moved less than usual", "Ja, og jeg bevægede mig mindre end normalt"), "Yes and I moved a normal amount" = c("3", "Yes and I moved a normal amount", "Ja, og jeg bevægede mig som jeg normalt ville have gjort"),"Yes and I moved more than usual" = c("4", "Yes and I moved more than usual", "Ja, og jeg bevægede mig mere end normalt"))}) # with the 1.5 value, see section on checking that the values make sense for explanation. Just one pt used it and it looks like they tried to scratch out 1 and leave 2. 
+
+# factor aware_others_moving
+df.full<-df.full%>%mutate_at(vars(matches("aware_others_moving")), function(x){fct_collapse(x, "Not aware of others' movement" = c("1", "Not aware of others&#39; movement", "Not aware of others’ movement","Not aware of others' movement", "Ikke opmærksom på andres bevægelse"),"Yes and they moved less than usual"= c("2", "Yes and they moved less than usual"), "Yes and they moved a normal amount" = c("3", "Yes and they moved a normal amount", "Ja, og de bevægede sig som de normalt ville have gjort"),"Yes and they moved more than usual" = c("4", "Yes and they moved more than usual"))})
+
+```
+
+## Pre-processing
+
+### create a new ID col
+```{r}
+df.full<-rowid_to_column(df.full, "Pt_ID")
+```
+
+### Numeric
+```{r}
+# Make a list of any responses that are not entirely numeric and convert to numeric by extracting the first character and then converting to numeric
+firstnum<-function(x) (str_sub(x, end = 1))
+```
+
+Convert numeric cols to numeric
+```{r}
+dfNum<-df.full%>%select(
+  fan:EC_7, 
+  tears_Beethoven:negatively_transformed_Beethoven,
+  tears_Schnittke:negatively_transformed_Schnittke, 
+  perceive:style,
+  tears_Folk:negatively_transformed_Folk,
+  aware_recording:changed_behaviour,
+  Engage_1:Touch_4, # because I need to extract first number and factor both dfs together
+  AIMS_1:AIMS_34,
+  connected_audience_streaming_Beethoven:connected_audience_attending_Folk)%>%
+  mutate(across(everything(),firstnum))%>%
+  mutate(across(everything(),as.numeric))
+#NAs introduced by coercion error message because some Pts wrote letters into the age category
+
+df.full[names(dfNum)]<-dfNum
+
+df.full<-df.full%>%
+  mutate(age = as.numeric(age))
+```
+
+### Factor
+Convert factor cols to factor
+```{r}
+dfFac<-df.full%>%select(
+  userID:viewing_with_others, 
+  gender:personal_relation, 
+  aware_body_Beethoven:aware_others_moving_Beethoven,
+  aware_body_Schnittke:aware_others_moving_Schnittke,
+  aware_body:aware_others_moving,
+  aware_body_Folk:aware_others_moving_Folk,
+  phone_loc)
+
+dfFac<-dfFac%>%mutate_all(factor)
+
+df.full[names(dfFac)]<-dfFac
+```
+
+
+### Check that the values make sense
+When reviewing these summaries, I visually checked the min and the max values to see whether they were appropriate for the response options. 
+```{r}
+# summary(df.full[1:10])
+# summary(df.full[11:20])
+# summary(df.full[21:30])
+# summary(df.full[31:40]) # check why admiration_Beethoven max = 7?
+# summary(df.full[41:50])
+# summary(df.full[51:60])
+# summary(df.full[61:70])
+# summary(df.full[71:80]) # check why admiration_Schnittke max = 7?
+# summary(df.full[81:90])
+# summary(df.full[91:100]) # check why negatively transformed schnittke max = 9? check why aware_movement_schnittke has one response 1.5, 
+# summary(df.full[101:110]) # check why Bach Familiar max = 7 # check why style has min 1 and max 7 # check why aware_body Bach has a value of 6
+# summary(df.full[111:120])  
+# summary(df.full[121:130])  
+# summary(df.full[131:140])  
+# summary(df.full[141:150])
+# summary(df.full[151:160])
+# summary(df.full[161:170])
+# summary(df.full[171:180])
+# summary(df.full[181:190])
+# summary(df.full[191:200])
+# summary(df.full[201:210])
+```
+#### Check vars
+```{r}
+# check why admiration_Beethoven max = 7?
+check<-df.full%>%select(ID, admiration_Beethoven)
+## DSQd052 (the pt did not fil one question and the RA missed this and did not write an NA)
+
+# check why admiration_Schnittke max = 7?
+check<-df.full%>%select(ID, admiration_Schnittke)
+## DSQd081 there were incorrect numbers in two places in this section...
+
+# check why negatively transformed schnittke max = 9?
+check<-df.full%>%select(ID, negatively_transformed_Schnittke)
+## DSQd098 RA typed 9 when it should have been a 0
+
+# check why aware_movement_schnittke has one response of 1.5
+check<-df.full%>%select(ID, aware_movement_Schnittke)
+## DSQd036 (note RA was instructed to average when two or more options are selected) It looks like they tried to scratch out 1 a little and so we can just change it to 2. I added 1.5 to the response options for the second option.
+
+# check why Bach Familiar max = 7ø check why style has min 1 and max 7 
+check<-df.full%>%select(ID, Pt_ID, familiar) 
+## Turns out that the nettskjema response options were 1 (jeg har aldrig hørt det før) to 7 (jeg kender musikken ret godt). The style question has response options 1 (Jeg har aldrig hørt det før) to 7 (Jeg kender musikken ret godt). Therefore I need to change the response mapping in the virtual survey.
+
+# check why aware_body Bach has a value of 6
+check<-df.full%>%select(ID, Pt_ID, aware_body) 
+
+# check gender dsqd132, (was written 32, pt checked kvinde)
+# check aware_body_Schnittke DSQe022 (listed as 6 in the table) (turned out Maria got off track and some things were shifted in the spreadsheet.
+# Check aware_body_folk DSQd097 because it is listed as 0. (again this is an issue where there was a typo/number inserted somewhere and therefore many questions were shifted)
+```
+##### convert the response options for the Bach questions "familiar" and "style" to be able to have them on the same scale
+specifically convert the virtual participants to the 0 to 6 scale by subtracting 1
+```{r}
+df.full<-df.full%>%mutate(familiar = ifelse(group == "Virtual", familiar-1, familiar))
+df.full<-df.full%>%mutate(style = ifelse(group == "Virtual", style-1, style))
+```
+
+### check also for response bias/pts who answered the same number even on opposite items
+"straight lining"
+can check this with stdev functions but should probably do it on a windowed basis. Should do more searching on if there is already a function/lib that can help me. Also check out other options for checking nonsense responses or "seriousness checks" https://link.springer.com/article/10.3758/s13428-012-0265-2
+Could also consider flagging if there were negative comments and then take a closer look at their responses. 
+```{r}
+
+```
+
+### Create combined measures
+Go through the surveys and create the combined measures including:
+* empathic concern 
+* Kama Muta 
+* awe scale
+* Absorption Scale - unclear how to analyze it because it is unclear what is considered high absorption versus low
+* AIMS
+
+#### Empathic Concern Scale
+Note: I checked the reverse scoring in both the paper survey and the online survey and it is correct. The order of questions in this survey was slightly different from the Quarantine Concerts experiment.
+```{r}
+EC.df<-df.full%>%select(group,EC_1, EC_2, EC_3, EC_4, EC_5, EC_6, EC_7)
+
+# reverse score the reversed items
+columnsToReverse<-c("EC_2","EC_4","EC_5")
+EC_R<-EC.df # make duplicate to check reverse scoring with
+EC_R[,columnsToReverse]<-6-EC_R[,columnsToReverse]
+
+EC.dfEC<-EC.df%>%select(-group)
+EC_R<-EC_R%>%select(-group)
+# check alpha
+summary(psych::alpha(EC_R))$raw_alpha
+#summary(psych::alpha(EC.df))$raw_alpha # good. seems that reversing the cols helps and is detectable in alpha
+#create avg value
+df.full$EC<-rowMeans(EC_R, na.rm=TRUE)
+```
+
+##### Try again with removing EC_6: I am often quite touched by things that I see happen.
+```{r}
+EC_R<-EC_R%>%select(-EC_6)
+#create avg value
+df.full$EC_noTouched<-rowMeans(EC_R, na.rm=TRUE)
+```
+
+
+#### AIMS
+Info on AIMS: https://smartlaboratory.org/resources/aims-scale/
+All items are worded in a positive direction so none need to be reversed.
+```{r}
+AIMS<-df.full%>%
+  select(contains("AIMS"))
+
+summary(psych::alpha(AIMS))$raw_alpha
+
+df.full$AIMS<-rowMeans(AIMS, na.rm=TRUE)
+```
+
+#### Kama Muta Scale (KAMMUS-S US)
+The International Kama Muta scale was validated across 19 countries and includes the KAMMUS-2, a 22-24 item scale, instead of the 50 item version (Zickfeld, 2019).
+The authors recommend that the scores of the 5 aspects should not be averaged but instead, a high score across all 5 aspects would be indicative of people experiencing this distinct social-relational emotion. However, Beate Seibt, expert on Kama Muta suggested doing a reliability analysis across all items of the short scale and averaging them if the reliability score was satisfactory.
+
+The 5 Aspects of Being Moved Experiences are:
+1. Physical sensations
+2. Appraisal patterns
+3. Motivation or action tendencies (telling care and wanting hug were not included because they did not seem relevant for the classical music concert context)
+4. Valence
+5. Labels (words used to describe kama muta - vary by culture/language. e.g. English: being moved or being touched)
+
+##### Compute for 3 pieces
+Note: could not use the "contains" short cut because "untouched" and "others_moved" were being selected as well.
+```{r}
+#Beethoven
+KM_Beethoven<-df.full%>%
+  select(tears_Beethoven:positive_Beethoven, moved_Beethoven:touched_Beethoven)
+
+print(summary(psych::alpha(KM_Beethoven))$raw_alpha)
+  
+df.full$KM_Beethoven<-rowMeans(KM_Beethoven, na.rm=TRUE)
+
+# Schnittke
+KM_Schnittke<-df.full%>%
+  select(tears_Schnittke:positive_Schnittke, moved_Schnittke:touched_Schnittke)
+
+print(summary(psych::alpha(KM_Schnittke))$raw_alpha)
+  
+df.full$KM_Schnittke<-rowMeans(KM_Schnittke, na.rm=TRUE)
+
+# FOlk
+KM_Folk<-df.full%>%
+  select(tears_Folk:positive_Folk, moved_Folk:touched_Folk)
+
+print(summary(psych::alpha(KM_Folk))$raw_alpha)
+  
+df.full$KM_Folk<-rowMeans(KM_Folk, na.rm=TRUE)
+
+```
+
+#### Awe Scale
+The awe experience scale items (AWE-S; Yaden et al., 2019) we used were the two highest loading items from the subscales of perceived vastness, physical sensations, and need for accommodation:
+*Perceived Vastness*
+- I felt that I was in the presence of something grand.
+- I experienced something greater than myself.
+*Physical sensations*
+- I felt my jaw drop.
+- I gasped.
+*Accomodation*
+- I felt challenged to mentally process what I was experiencing.
+- I found it hard to comprehend the experience in full.
+
+The items have the qIDs:
+- "presence_grand", 
+- "greater_than_myself",
+- "jaw_drop",
+- "gasped",
+- "challenge_process",
+- "hard_comprehend",
+
+
+```{r}
+#Beethoven
+AWE<-df.full%>%
+  select(contains("Beethoven"))%>%
+  select(contains(c("presence_grand", "greater_than_myself", "jaw_drop", "gasped", "challenge_process", "hard_comprehend")))
+
+print(summary(psych::alpha(AWE))$raw_alpha)
+
+df.full$AWE_Beethoven<-rowMeans(AWE, na.rm=TRUE)
+
+#Schnittke
+AWE<-df.full%>%
+  select(contains("Schnittke"))%>%
+  select(contains(c("presence_grand", "greater_than_myself", "jaw_drop", "gasped", "challenge_process", "hard_comprehend")))
+
+print(summary(psych::alpha(AWE))$raw_alpha)
+
+df.full$AWE_Schnittke<-rowMeans(AWE, na.rm=TRUE)
+
+#Folk
+AWE<-df.full%>%
+  select(contains("Folk"))%>%
+  select(contains(c("presence_grand", "greater_than_myself", "jaw_drop", "gasped", "challenge_process", "hard_comprehend")))
+
+print(summary(psych::alpha(AWE))$raw_alpha)
+
+df.full$AWE_Folk<-rowMeans(AWE, na.rm=TRUE)
+```
+
+# Save prepared data
+```{r}
+saveRDS(df.full, "Prepared_Data.Rda")
+```
+
