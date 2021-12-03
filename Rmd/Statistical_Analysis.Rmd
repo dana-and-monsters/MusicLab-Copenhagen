@@ -5,6 +5,8 @@ date: "24/11/2021"
 output: html_document
 ---
 
+TODO: Investigate using rmcorr: https://www.frontiersin.org/articles/10.3389/fpsyg.2017.00456/full
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```

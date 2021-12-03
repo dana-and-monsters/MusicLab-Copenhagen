@@ -381,12 +381,15 @@ test.df<-compare_df_cols(live.df, df) # looks great! (this helped me catch the l
 
 ```{r}
 df.full<-full_join(live.df, df)
+df.full2<-full_join(live.df, df, by = character())
+summary(df.full$phone_loc)
+summary(df.full$changed_behaviour)
 ```
 
 ## Translations and factor
 Factor these vars so that it will convert the norsk to the english
 ```{r}
-df.full$gender<-fct_collapse(df.full$gender, Man = c("Man", "Mand", "1"), Woman = c("Woman", "Kvinde", "2", Not_Identify = c("Choose not to Identify", "3"), Other = c("Other", "4") ))
+df.full$gender<-fct_collapse(df.full$gender, Man = c("Man", "Mand", "1"), Woman = c("Woman", "Kvinde", "2"), "Choose Not to Identify" = c("Choose not to Identify", "3"), Other = c("Other", "4"))
 
 df.full$musician_status<-fct_collapse(df.full$musician_status,"Tone-deaf" = c("1", "Tone-deaf", "Tonedøv"), "Nonmusician" = c("2", "Nonmusician", "Ikke-musiker"), "Music-loving nonmusician" = c("3", "Music-loving nonmusician", "Musikelskende ikke-musiker"), "Amateur musician" = c("4", "Amateur musician", "Amatørmusiker"), "Serious amateur musician" = c("5", "Serious amateur musician", "Seriøs amatørmusiker"), "Semiprofessional musician"= c("6", "Semiprofessional musician", "Semiprofessionel musiker"), "Professional musician" = c("7", "Professional musician", "Professionel musiker"))
 
@@ -404,6 +407,17 @@ df.full<-df.full%>%mutate_at(vars(matches("aware_others_moving")), function(x){f
 
 ```
 
+## Factor those factors that were only in the virtual participants list
+city, viewing with others, phone_loc
+City: hard to factor. Maybe just leave as is. 
+viewing_with_others: this question was written "Are you viewing the concert with anyone you know?" with the subtitle "Fill in the number of people you are viewing the concert with: "
+I did not realize that the subtitle would not be written in the surveys in the app, so they only saw the main question without the subtitle. Because of this, people occasssionally wrote yes, no or reported who they were watching the concert with or "aline" which is likely a typo of "alone". I have recoded to yes or no for these purposes. 
+```{r}
+df.full$viewing_with_others<-fct_collapse(df.full$viewing_with_others, Yes = c("Yes", "yes", "ja", "Ja", "My cousin", "My wife", "Parents"), No = c("No","Nope", "no", "Nei","Nej", "Aline"))
+df.full$phone_loc<-fct_collapse(df.full$phone_loc, Upper = c("It was located on my UPPER body", "Den befandt sig på min overkrop"), Lower = c("It was located on my LOWER body"), Other = c("Other", "Andet"))
+```
+
+
 ## Pre-processing
 
 ### create a new ID col
@@ -412,8 +426,9 @@ df.full<-rowid_to_column(df.full, "Pt_ID")
 ```
 
 ### Numeric
+The virtual participants have responses like 0 (Not at all) 6 (A lot). These numbers always start the responses therefore you can extract the first number and convert to numeric. 
+Create a function to extract the first number and convert to numeric.
 ```{r}
-# Make a list of any responses that are not entirely numeric and convert to numeric by extracting the first character and then converting to numeric
 firstnum<-function(x) (str_sub(x, end = 1))
 ```
 
@@ -431,12 +446,12 @@ dfNum<-df.full%>%select(
   connected_audience_streaming_Beethoven:connected_audience_attending_Folk)%>%
   mutate(across(everything(),firstnum))%>%
   mutate(across(everything(),as.numeric))
-#NAs introduced by coercion error message because some Pts wrote letters into the age category
 
 df.full[names(dfNum)]<-dfNum
 
 df.full<-df.full%>%
   mutate(age = as.numeric(age))
+# NAs introduced by coercion error message because one participant wrote nonsensical letters into the age category
 ```
 
 ### Factor
@@ -486,7 +501,7 @@ When reviewing these summaries, I visually checked the min and the max values to
 ```{r}
 # check why admiration_Beethoven max = 7?
 check<-df.full%>%select(ID, admiration_Beethoven)
-## DSQd052 (the pt did not fil one question and the RA missed this and did not write an NA)
+## DSQd052 (the pt did not fill one question and the RA missed this and did not write an NA)
 
 # check why admiration_Schnittke max = 7?
 check<-df.full%>%select(ID, admiration_Schnittke)
@@ -511,6 +526,8 @@ check<-df.full%>%select(ID, Pt_ID, aware_body)
 # check aware_body_Schnittke DSQe022 (listed as 6 in the table) (turned out Maria got off track and some things were shifted in the spreadsheet.
 # Check aware_body_folk DSQd097 because it is listed as 0. (again this is an issue where there was a typo/number inserted somewhere and therefore many questions were shifted)
 ```
+All of the errors identified in the "check vars" section above have been corrected in the spreadsheet.
+
 ##### convert the response options for the Bach questions "familiar" and "style" to be able to have them on the same scale
 specifically convert the virtual participants to the 0 to 6 scale by subtracting 1
 ```{r}
@@ -518,7 +535,7 @@ df.full<-df.full%>%mutate(familiar = ifelse(group == "Virtual", familiar-1, fami
 df.full<-df.full%>%mutate(style = ifelse(group == "Virtual", style-1, style))
 ```
 
-### check also for response bias/pts who answered the same number even on opposite items
+### TODO: check also for response bias/pts who answered the same number even on opposite items
 "straight lining"
 can check this with stdev functions but should probably do it on a windowed basis. Should do more searching on if there is already a function/lib that can help me. Also check out other options for checking nonsense responses or "seriousness checks" https://link.springer.com/article/10.3758/s13428-012-0265-2
 Could also consider flagging if there were negative comments and then take a closer look at their responses. 
@@ -544,22 +561,24 @@ columnsToReverse<-c("EC_2","EC_4","EC_5")
 EC_R<-EC.df # make duplicate to check reverse scoring with
 EC_R[,columnsToReverse]<-6-EC_R[,columnsToReverse]
 
-EC.dfEC<-EC.df%>%select(-group)
+EC.df<-EC.df%>%select(-group)
 EC_R<-EC_R%>%select(-group)
 # check alpha
 summary(psych::alpha(EC_R))$raw_alpha
 #summary(psych::alpha(EC.df))$raw_alpha # good. seems that reversing the cols helps and is detectable in alpha
+
 #create avg value
 df.full$EC<-rowMeans(EC_R, na.rm=TRUE)
 ```
 
-##### Try again with removing EC_6: I am often quite touched by things that I see happen.
+##### Create a measure removing EC_6: I am often quite touched by things that I see happen.
+I also want to check if the relations that are observed between the empathic concern scale and kama muta are in any way related to the fact that EC contains an item "I am often quite touched by things that I see happen." I thought that this could be one reason why this relation is observed. When I tested this in the exploratory analysis, empathic concern even without the item on frequently feeling touched was still highly correlated with kama muta.
+
 ```{r}
 EC_R<-EC_R%>%select(-EC_6)
 #create avg value
 df.full$EC_noTouched<-rowMeans(EC_R, na.rm=TRUE)
 ```
-
 
 #### AIMS
 Info on AIMS: https://smartlaboratory.org/resources/aims-scale/
@@ -568,7 +587,7 @@ All items are worded in a positive direction so none need to be reversed.
 AIMS<-df.full%>%
   select(contains("AIMS"))
 
-summary(psych::alpha(AIMS))$raw_alpha
+summary(psych::alpha(AIMS))$raw_alpha # note that alpha becomes higher with many items and it may be a poor marker of internal consistency because of the large number of items in AIMS. Still this scale has previously been tested, and therefore we do not need to worry about checking this so much.
 
 df.full$AIMS<-rowMeans(AIMS, na.rm=TRUE)
 ```
@@ -665,6 +684,7 @@ df.full$AWE_Folk<-rowMeans(AWE, na.rm=TRUE)
 
 # Save prepared data
 ```{r}
-saveRDS(df.full, "Prepared_Data.Rda")
+filename<-paste0("../output/Prepared_Data.Rda")
+saveRDS(df.full, filename)
 ```
 

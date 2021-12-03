@@ -8,16 +8,34 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+## Import libraries
+
+```{r libraries}
+packages = c("psych", "readxl", "magrittr", "reshape2","ggpubr", "ltm","janitor", "PerformanceAnalytics", "tidyverse", "lme4")
+
+## Now load or install&load all
+package.check <- lapply(
+  packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+
+source("useful_functions.R")
+```
 
 # Load the Data
 ```{r}
-df.full<-readRDS(file = "Prepared_Data.Rda")
+df.full<-readRDS(file = "../output/Prepared_Data.Rda")
 ```
 
 # Explore the Data
 ## characterize demographics
 ```{r}
-df.full%>%group_by(group)%>%count()
+df.full%>%group_by(gender)%>%count()
 ```
 
 ### Live
@@ -63,7 +81,8 @@ df.full%>%filter(group=="Virtual")%>%summarise(mean(EC, na.rm= TRUE), sd(EC, na.
 
 # City list 
 txt<-df.full%>%select(city)%>%drop_na()
-write.table(txt, file = "city_wordcloud.txt", sep = "\t",
+filename<-paste0("../output/city_wordcloud.txt")
+write.table(txt, file = filename, sep = "\t",
             row.names = FALSE)
 ```
 
@@ -140,6 +159,40 @@ df.wide%>%
   select(EC, KM,connected_musicians,connected_audience)%>%
   chart.Correlation(method = "kendall")
 ```
+
+### Cross-correlation between those items that were strongly correlated in the big cross-correlation (to examine looking at the raw data scatter plots again)
+```{r}
+dat<-df.full%>%select(Pt_ID, group, contains("connected"), contains("KM"), contains("positively_transformed"), contains("enjoy"),contains("absorbed_music"))
+
+virt.dat<-dat%>%filter(group == "Virtual")%>%
+  mutate(connected_audience_Beethoven = (connected_audience_streaming_Beethoven+connected_audience_attending_Beethoven)/2)%>%
+  mutate(connected_audience_Schnittke = (connected_audience_streaming_Schnittke+connected_audience_attending_Schnittke)/2)%>%
+  mutate(connected_audience_Folk = (connected_audience_streaming_Folk+connected_audience_attending_Folk)/2)
+  
+live.dat<-dat%>%filter(group == "Live")
+
+df<-bind_rows(live.dat, virt.dat)%>%
+  select(-c(connected_audience_streaming_Beethoven,connected_audience_attending_Beethoven,connected_audience_streaming_Schnittke,connected_audience_attending_Schnittke, connected_audience_streaming_Folk, connected_audience_attending_Folk))
+
+#make long
+df.long<-df%>%pivot_longer(!c(group, Pt_ID),
+                        names_to = c("question", "piece"),
+                        names_pattern ="(.*)_(.*)",
+                        values_to = "response")
+
+df.wide<-df.long%>%pivot_wider(names_from = question, values_from = response)
+
+df.wide%>%
+  filter(group =="Live")%>%
+  select(-c(Pt_ID, group, piece))%>%
+  chart.Correlation(method = "kendall")
+
+df.wide%>%
+  filter(group =="Virtual")%>%
+  select(-c(Pt_ID, group, piece))%>%
+  chart.Correlation(method = "kendall")
+```
+
 
 ### Multiple comparison corrections
 NOTE: this revealed that the chart.correlations are very minimally different....maybe it would be different for a chart with many more variables?
@@ -269,7 +322,102 @@ df.full%>%
   chart.Correlation(method = "kendall")
 ```
 
-## Cross-correlation
+## Kama Muta: A closer look
+
+```{r}
+dat<-df.full%>%
+  select(contains(c('group', 'Pt_ID', 'piece','tears','choked_up','chills','warm_feeling','welcoming','closeness','refreshed','positive','moved','touched'))) # remove kama muta vars except for  "positive" because I want to see the positive versus negative
+
+#Beethoven
+KM_Beethoven<-df.full%>%
+  select(group, Pt_ID, tears_Beethoven:positive_Beethoven, moved_Beethoven:touched_Beethoven)
+
+# Schnittke
+KM_Schnittke<-df.full%>%
+  select(group, Pt_ID, tears_Schnittke:positive_Schnittke, moved_Schnittke:touched_Schnittke)
+
+# FOlk
+KM_Folk<-df.full%>%
+  select(group, Pt_ID, tears_Folk:positive_Folk, moved_Folk:touched_Folk)
+  
+# save charts
+
+Title = "Beethoven_Live"
+
+graphname<-paste0("../plots/KamaMuta_CC_",Title, ".jpg")
+
+jpeg(graphname, width = 1500, height = 1500)
+
+KM_Beethoven%>%filter(group == "Live")%>%
+  select(-c(group, Pt_ID))%>%
+  chart.Correlation(method = "kendall")
+
+dev.off()
+
+Title = "Beethoven_Virtual"
+
+graphname<-paste0("../plots/KamaMuta_CC_",Title, ".jpg")
+
+jpeg(graphname, width = 1500, height = 1500)
+
+KM_Beethoven%>%filter(group == "Virtual")%>%
+  select(-c(group, Pt_ID))%>%
+  chart.Correlation(method = "kendall")
+
+dev.off()
+
+Title = "Schnittke_Live"
+
+graphname<-paste0("../plots/KamaMuta_CC_",Title, ".jpg")
+
+jpeg(graphname, width = 1500, height = 1500)
+
+KM_Schnittke%>%filter(group == "Live")%>%
+  select(-c(group, Pt_ID))%>%
+  chart.Correlation(method = "kendall")
+
+dev.off()
+
+Title = "Schnittke_Virtual"
+
+graphname<-paste0("../plots/KamaMuta_CC_",Title, ".jpg")
+
+jpeg(graphname, width = 1500, height = 1500)
+
+KM_Schnittke%>%filter(group == "Virtual")%>%
+  select(-c(group, Pt_ID))%>%
+  chart.Correlation(method = "kendall")
+
+dev.off()
+
+Title = "Folk_Live"
+
+graphname<-paste0("../plots/KamaMuta_CC_",Title, ".jpg")
+
+jpeg(graphname, width = 1500, height = 1500)
+
+KM_Folk%>%filter(group == "Live")%>%
+  select(-c(group, Pt_ID))%>%
+  chart.Correlation(method = "kendall")
+
+dev.off()
+
+Title = "Folk_Virtual"
+
+graphname<-paste0("../plots/KamaMuta_CC_",Title, ".jpg")
+
+jpeg(graphname, width = 1500, height = 1500)
+
+KM_Folk%>%filter(group == "Virtual")%>%
+  select(-c(group, Pt_ID))%>%
+  chart.Correlation(method = "kendall")
+
+dev.off()
+
+```
+
+
+## Cross-correlations for the absorption items and aggregate measures
 ### Regardless of piece
 ```{r}
 dat<-df.full%>%
@@ -352,7 +500,7 @@ Especially examine absorption's relation to other things. Remove vars that are r
 ```{r}
 corData<-df.full%>% # without including the KM vars, awe vars, and aware vars
   filter(group == "Live")%>%
-  select(EC, fan, group, contains('Beethoven'))%>%
+  select(EC, fan, group, AIMS, contains('Beethoven'))%>%
   select(-contains(c('tears','chills','warm_feeling','choked_up','refreshed','welcoming','closeness','moved','touched')))%>% # remove kama muta vars except for  "positive" because I want to see the positive versus negative association and I don't want to remove the positively transformed one. 
   select(-contains(c('presence_grand','greater_than_myself','jaw_drop','gasped','challenge_process','hard_comprehend')))%>%
   select(-contains('aware'))%>%# because these are factors (but could actually be converted to ordinal)
@@ -383,7 +531,7 @@ ggsave(graphname,
 ```{r}
 corData<-df.full%>% # without including the KM vars, awe vars, and aware vars
   filter(group == "Virtual")%>% # UPDATE
-  select(EC, fan, group, contains('Beethoven'))%>% # UPDATE
+  select(EC, fan, group, contains('Beethoven'))%>% # UPDATE # removed AIMS because it 
   select(-contains(c('tears','chills','warm_feeling','choked_up','refreshed','welcoming','closeness','moved','touched')))%>% # remove kama muta vars except for  "positive" because I want to see the positive versus negative association and I don't want to remove the positively transformed one. 
   select(-contains(c('presence_grand','greater_than_myself','jaw_drop','gasped','challenge_process','hard_comprehend')))%>%
   select(-contains('aware'))%>%# because these are factors (but could actually be converted to ordinal)
@@ -412,7 +560,7 @@ ggsave(graphname,
 ```{r}
 corData<-df.full%>% # without including the KM vars, awe vars, and aware vars
   filter(group == "Live")%>%
-  select(ID,EC, fan, group, contains('Schnittke'))%>%
+  select(ID,EC, fan, group, AIMS, contains('Schnittke'))%>%
   select(-contains(c('tears','chills','warm_feeling','choked_up','refreshed','welcoming','closeness','moved','touched')))%>% # remove kama muta vars except for  "positive" because I want to see the positive versus negative association and I don't want to remove the positively transformed one. 
   select(-contains(c('presence_grand','greater_than_myself','jaw_drop','gasped','challenge_process','hard_comprehend')))%>%
   select(-contains('aware'))%>%# because these are factors (but could actually be converted to ordinal)
@@ -470,7 +618,7 @@ ggsave(graphname,
 ```{r}
 corData<-df.full%>% # without including the KM vars, awe vars, and aware vars
   filter(group == "Live")%>%
-  select(EC, fan, group, contains('Folk'))%>%
+  select(EC, fan, group, AIMS, contains('Folk'))%>%
   select(-contains(c('tears','chills','warm_feeling','choked_up','refreshed','welcoming','closeness','moved','touched')))%>% # remove kama muta vars except for  "positive" because I want to see the positive versus negative association and I don't want to remove the positively transformed one. 
   select(-contains(c('presence_grand','greater_than_myself','jaw_drop','gasped','challenge_process','hard_comprehend')))%>%
   select(-contains('aware'))%>%# because these are factors (but could actually be converted to ordinal)
@@ -580,7 +728,7 @@ absorb.items<-c("own_world", "absorbed_music", "daydream", "sense_time", "distra
 absorb<-df.full%>%
   select(group, Pt_ID, contains(absorb.items))
 
-absorb.long<-absorb%>%pivot_longer(!group,
+absorb.long<-absorb%>%pivot_longer(!c(group,Pt_ID),
                         names_to = c("question", "piece"),
                         names_pattern ="(.*)_(.*)",
                         values_to = "response")
@@ -743,7 +891,7 @@ aware_body.long<-aware.long%>%filter(question == "aware_body")%>%filter(response
 Title = "Aware Body"
 
 ggplot(aware_body.long, aes(x = response, fill = group))+
-  geom_histogram( stat = "count", position= position_dodge(preserve = "single"))+
+  geom_histogram( stat = "density", position= position_dodge(preserve = "single"))+
   labs(title = Title)+
   theme_minimal()+
   theme(axis.text.x = element_text(vjust = 1, hjust = 1, angle = 45, size = 6))+
@@ -836,8 +984,132 @@ ggplot(conn.musicians, aes(x = response, y = stat(width*density), fill = group))
 
 ```
 
+## Cross-correlation on absorption items
+### kama muta versus ...
+trait empathy and absorption relation?
+include empathy and all items in the absorption measure
+```{r}
+
+absorb.items<-c("own_world", "absorbed_music", "daydream", "sense_time", "distracted", "attentive", "attention_others","attention_sensations", "transformed")
+
+absorb<-df.full%>%
+  select(group, Pt_ID, EC, AIMS, contains(absorb.items))
+
+absorb.long<-absorb%>%pivot_longer(!c(group,Pt_ID, EC, AIMS),
+                        names_to = c("question", "piece"),
+                        names_pattern ="(.*)_(.*)",
+                        values_to = "response")
+
+absorb.wide<-absorb.long%>%pivot_wider(names_from = question, values_from = response)
+
+absorb.beethoven<-absorb.wide%>%
+  filter(piece == "Beethoven")%>%
+  drop_na()
+
+absorb.schnittke<-absorb.wide%>%
+  filter(piece == "Schnittke")%>%
+  drop_na()
+
+absorb.folk<-absorb.wide%>%
+  filter(piece == "Folk")%>%
+  drop_na()
+
+## Save plots: Beethoven 
+
+Title = "Beethoven_Live"
+
+graphname<-paste0("../plots/CrossCorr_",Title, ".jpg")
+
+jpeg(graphname, width = 1500, height = 1500)
+
+absorb.beethoven%>%
+  filter(group =="Live")%>%
+  select(-c(Pt_ID, group, piece))%>%
+  chart.Correlation(method = "kendall")
+
+dev.off()
+
+##
+
+Title = "Beethoven_Virtual"
+
+graphname<-paste0("../plots/CrossCorr_",Title, ".jpg")
+
+jpeg(graphname, width = 1500, height = 1500)
+
+absorb.beethoven%>%
+  filter(group =="Virtual")%>%
+  select(-c(Pt_ID, group, piece))%>%
+  chart.Correlation(method = "kendall")
+
+dev.off()
+
+## Save plots: Schnittke 
+
+Title = "Schnittke_Live"
+
+graphname<-paste0("../plots/CrossCorr_",Title, ".jpg")
+
+jpeg(graphname, width = 1500, height = 1500)
+
+absorb.schnittke%>%
+  filter(group =="Live")%>%
+  select(-c(Pt_ID, group, piece))%>%
+  chart.Correlation(method = "kendall")
+
+dev.off()
+
+##
+
+Title = "Schnittke_Virtual"
+
+graphname<-paste0("../plots/CrossCorr_",Title, ".jpg")
+
+jpeg(graphname, width = 1500, height = 1500)
+
+absorb.schnittke%>%
+  filter(group =="Virtual")%>%
+  select(-c(Pt_ID, group, piece))%>%
+  chart.Correlation(method = "kendall")
+
+dev.off()
+
+## Save plots: Folk 
+
+Title = "Folk_Live"
+
+graphname<-paste0("../plots/CrossCorr_",Title, ".jpg")
+
+jpeg(graphname, width = 1500, height = 1500)
+
+absorb.folk%>%
+  filter(group =="Live")%>%
+  select(-c(Pt_ID, group, piece))%>%
+  chart.Correlation(method = "kendall")
+
+dev.off()
+
+##
+
+Title = "Folk_Virtual"
+
+graphname<-paste0("../plots/CrossCorr_",Title, ".jpg")
+
+jpeg(graphname, width = 1500, height = 1500)
+
+absorb.folk%>%
+  filter(group =="Virtual")%>%
+  select(-c(Pt_ID, group, piece))%>%
+  chart.Correlation(method = "kendall")
+
+dev.off()
+
+```
+
+
 # Comments
 ```{r}
 comments<-df.full%>%select(group,language,Pt_ID, Comments)
 ```
 
+## Add a tag of negative or positive and then see if that influences people's average survey responses (generally). Perhaps this could act as a bit of a seriousness check. 
