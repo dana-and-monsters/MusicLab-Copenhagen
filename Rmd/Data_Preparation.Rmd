@@ -59,7 +59,7 @@ To avoid repeating everything 2x, will just combine english and danish surveys h
 q1<-names(english.df1)
 q1.dansk<-names(dansk.df1)
 q1id<-c("NR", "userID", "city", "viewing_with_others", "age", "gender", "musician_status", "personal_relation", "fan", "EC_1", "EC_2", "EC_3", "EC_4", "EC_5", "EC_6", "EC_7","Elapsed_time")
-codebook1<-cbind(q1id,q1, q1.dansk)
+codebook1<-data.frame(cbind(q1id,q1, q1.dansk))
 
 # Rename cols based on codes
 names(english.df1)<-q1id
@@ -149,7 +149,7 @@ q2id<-c("NR",
 ```
 
 ```{r}
-codebook2<-cbind(q2id, q2) #don't need to repeat for 3 or 5
+codebook2<-data.frame(cbind(q2id, q2, q2.dansk)) #don't need to repeat for 3 or 5
 ```
 
 ##### Rename cols in surveys
@@ -170,7 +170,6 @@ names(dansk.df5)<-q2id
 ```{r}
 q4<-names(english.df4)
 q4.dansk<-names(dansk.df4)
-print(q4)
 ```
 ```{r}
 q4id<-c("NR",
@@ -189,7 +188,7 @@ q4id<-c("NR",
        "aware_others_moving",
        "Elapsed_time")
 
-codebook3<-cbind(q4id, q4, q4.dansk)
+codebook3<-data.frame(cbind(q4id, q4, q4.dansk))
 
 names(english.df4)<-q4id
 names(dansk.df4)<-q4id
@@ -260,7 +259,7 @@ q6id<-c("NR",
       "Comments",
       "Elapsed_time")
 
-codebook4<-cbind(q6id, q6, q6.dansk)
+codebook4<-data.frame(cbind(q6id, q6, q6.dansk))
 
 names(english.df6)<-q6id
 names(dansk.df6)<-q6id
@@ -309,7 +308,7 @@ df<-full_join(df, df6, by ="userID")
 
 ## Data Cleaning
 ### Remove testing 
-I believe that the first 5 rows are just garbage/testing from before the concert
+The first 5 rows are just garbage/testing from before the concert.
 ```{r}
 df<-df%>%slice(6:nrow(df))
 
@@ -366,6 +365,23 @@ live.df<-live.df%>%
 live.df$musician_status<-as.character(round(as.numeric(live.df$musician_status), digits = 0)) # rounded the number to nearest whole number
 
 ```
+## Add the userID col to the live participants spreadsheet
+```{r}
+setwd('../experimental-data/')
+hall.ids <- read_excel("Concert_participants_installations.xlsx", sheet = "HallPartIDs")
+```
+```{r}
+hall.ids<-rename(hall.ids, c("userID"="Installations"))
+hallID<-hall.ids%>%select(userID, Code)
+
+live.df$Code<-unlist(lapply(live.df$ID, function(x) {toupper(substring(x, 4))}))
+test<-live.df%>%select(Code, ID)
+
+live.df<-left_join(live.df, hallID, by = "Code")
+test<-live.df%>%select(Code, userID)
+```
+
+
 
 ## Conduct a join to see which col names need to be changed
 Also import all cols as char to enable the join with the df.
@@ -376,7 +392,6 @@ df$group<-"Virtual"
 # Check for differences before joining
 test.df<-compare_df_cols(live.df, df) # looks great! (this helped me catch the language col issue and some other things)
 ```
-
 
 
 ```{r}
@@ -681,10 +696,49 @@ print(summary(psych::alpha(AWE))$raw_alpha)
 
 df.full$AWE_Folk<-rowMeans(AWE, na.rm=TRUE)
 ```
+#### Create the averaged connected_audience for the virtual audience
+1. Mutate only the virtual measures. 2. Recombine.
+```{r}
+df<-df.full
+
+virt.dat<-df%>%filter(group == "Virtual")%>%
+  mutate(connected_audience_Beethoven = (connected_audience_streaming_Beethoven+connected_audience_attending_Beethoven)/2)%>%
+  mutate(connected_audience_Schnittke = (connected_audience_streaming_Schnittke+connected_audience_attending_Schnittke)/2)%>%
+  mutate(connected_audience_Folk = (connected_audience_streaming_Folk+connected_audience_attending_Folk)/2)
+  
+live.dat<-df%>%filter(group == "Live")
+
+df.full<-bind_rows(live.dat, virt.dat)
+```
+
 
 # Save prepared data
+## R format
 ```{r}
 filename<-paste0("../output/Prepared_Data.Rda")
 saveRDS(df.full, filename)
+```
+## CSV file
+
+```{r}
+filename<-paste0("../output/Prepared_Data.csv")
+write.csv(df.full, filename, row.names = FALSE)
+```
+
+## Make a codebook for reference
+```{r}
+changeHead<-function(x){
+  names(x)= c("ID", "English_Q", "Danish_Q") 
+  return(x)}
+
+codebooks<-list(codebook1, codebook2, codebook3, codebook4)
+codebooks<-lapply(codebooks, changeHead)
+
+codebook<-bind_rows(codebooks)
+```
+### Save codebook
+```{r}
+filename<-paste0("../output/Codebook.csv")
+write.csv(codebook, filename, row.names = FALSE)
 ```
 
