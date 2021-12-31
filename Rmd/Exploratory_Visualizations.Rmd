@@ -78,7 +78,10 @@ df.full%>%filter(group=="Virtual")%>%summarise(mean(fan, na.rm= TRUE), sd(fan, n
 
 # SD EC
 df.full%>%filter(group=="Virtual")%>%summarise(mean(EC, na.rm= TRUE), sd(EC, na.rm= TRUE))
+```
 
+#### Make a list of cities of livestreamers for a wordcloud
+```{r}
 # City list 
 txt<-df.full%>%select(city)%>%drop_na()
 filename<-paste0("../output/city_wordcloud.txt")
@@ -131,14 +134,7 @@ df.full%>%
 ```{r}
 dat<-df.full%>%select(Pt_ID, group, contains("connected"), contains("KM"), EC)
 
-virt.dat<-dat%>%filter(group == "Virtual")%>%
-  mutate(connected_audience_Beethoven = (connected_audience_streaming_Beethoven+connected_audience_attending_Beethoven)/2)%>%
-  mutate(connected_audience_Schnittke = (connected_audience_streaming_Schnittke+connected_audience_attending_Schnittke)/2)%>%
-  mutate(connected_audience_Folk = (connected_audience_streaming_Folk+connected_audience_attending_Folk)/2)
-  
-live.dat<-dat%>%filter(group == "Live")
-
-df<-bind_rows(live.dat, virt.dat)%>%
+df<-dat%>%
   select(-c(connected_audience_streaming_Beethoven,connected_audience_attending_Beethoven,connected_audience_streaming_Schnittke,connected_audience_attending_Schnittke, connected_audience_streaming_Folk, connected_audience_attending_Folk))
 
 #make long
@@ -164,14 +160,7 @@ df.wide%>%
 ```{r}
 dat<-df.full%>%select(Pt_ID, group, contains("connected"), contains("KM"), contains("positively_transformed"), contains("enjoy"),contains("absorbed_music"))
 
-virt.dat<-dat%>%filter(group == "Virtual")%>%
-  mutate(connected_audience_Beethoven = (connected_audience_streaming_Beethoven+connected_audience_attending_Beethoven)/2)%>%
-  mutate(connected_audience_Schnittke = (connected_audience_streaming_Schnittke+connected_audience_attending_Schnittke)/2)%>%
-  mutate(connected_audience_Folk = (connected_audience_streaming_Folk+connected_audience_attending_Folk)/2)
-  
-live.dat<-dat%>%filter(group == "Live")
-
-df<-bind_rows(live.dat, virt.dat)%>%
+df<-dat%>%
   select(-c(connected_audience_streaming_Beethoven,connected_audience_attending_Beethoven,connected_audience_streaming_Schnittke,connected_audience_attending_Schnittke, connected_audience_streaming_Folk, connected_audience_attending_Folk))
 
 #make long
@@ -1112,4 +1101,89 @@ dev.off()
 comments<-df.full%>%select(group,language,Pt_ID, Comments)
 ```
 
-## Add a tag of negative or positive and then see if that influences people's average survey responses (generally). Perhaps this could act as a bit of a seriousness check. 
+## Add a tag of negative or positive and then see if that influences people's average survey responses (generally). Perhaps this could act as a bit of a respondent "seriousness check". (i.e. if they were expecting a normal concert or a science concert)
+
+## Others moved
+"To what extent do you believe audience members around you were moved?"
+0 (Not at all) - 6 (A lot)
+```{r}
+moved<-df.full%>%
+  select(contains("moved"), EC, contains("connected_audience"), group)%>%
+  select(-"emotionally_moved", -contains(c("attending", "streaming")))
+```
+### check for similarity
+1) subtract report of others from their own report
+2) absolute value
+3) check how empathy is correlated
+```{r}
+moved$similarity_Beethoven<-moved$moved_Beethoven-moved$others_moved_Beethoven
+moved$similarity_Beethoven<-abs(moved$similarity_Beethoven)
+summary(moved$similarity_Beethoven)
+
+moved$similarity_Schnittke<-moved$moved_Schnittke-moved$others_moved_Schnittke
+moved$similarity_Schnittke<-abs(moved$similarity_Schnittke)
+summary(moved$similarity_Schnittke)
+
+moved$similarity_Folk<-moved$moved_Folk-moved$others_moved_Folk
+moved$similarity_Folk<-abs(moved$similarity_Folk)
+summary(moved$similarity_Folk)
+
+# make a scatterplot examining EC and similarity
+moved%>%
+  select(EC, contains("similarity"))%>%
+  chart.Correlation(method = "kendall")
+```
+The chart suggests that there is no correlation between empathic concern and similarity.
+What else can lead to increased reports of similarity?
+- try connectedness
+
+```{r}
+# make a scatterplot examining connectedness and similarity
+moved%>%
+  select(-EC, -contains("moved"))%>%
+  chart.Correlation(method = "kendall")
+```
+Connectedness to the audience felt during Beethoven led to more similar reports of feeling moved and how much they thought others were moved. Negative correlations indicate that the more connected they felt, the more similar the felt (because similarity is a difference). BUT WEIRD: connectedness in Beethoven but not Schnittke was correlated with how similar pts reports were of feeling moved in Schnittke. 
+Strongest cor: connectedness to the audience and similarity in the Folk which is also the piece that made people feel most moved?
+
+## What about when comparing live and virtual separately?
+### Live
+```{r}
+moved%>%
+  filter(group == "Live")%>%
+  select(EC, contains("similarity"))%>%
+  chart.Correlation(method = "kendall")
+```
+### Virtual
+The virtua group had a really strong positive correlation between empathic concern and similarity which indicates that the more empathic concern a person had, they rated the other audience members as less similar in feeling moved. The sample is quite small though...
+```{r}
+moved%>%
+  filter(group == "Virtual")%>%
+  select(EC, contains("similarity"))%>%
+  chart.Correlation(method = "kendall")
+
+```
+## Similarity and connectedness separated by group
+### Live
+```{r}
+moved%>%
+  filter(group == "Live")%>%
+  select(-group, -EC, -contains("moved"))%>%
+  chart.Correlation(method = "kendall")
+```
+### Virtual
+```{r}
+moved%>%
+  filter(group == "Virtual")%>%
+  select(-group, -EC, -contains("moved"))
+
+%>%
+  chart.Correlation(method = "kendall")
+```
+
+## Lumping all pieces together
+```{r}
+
+```
+
+

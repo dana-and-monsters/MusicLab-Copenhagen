@@ -11,11 +11,10 @@ Note: originally this document was named "Virtual_Participants.Rmd" but it becam
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
 ## Import libraries
 
 ```{r libraries}
-packages = c("psych", "readxl", "magrittr", "reshape2","ggpubr", "ltm","janitor", "PerformanceAnalytics", "tidyverse", "lme4")
+packages = c("psych", "readxl", "magrittr", "reshape2","ggpubr", "ltm","janitor", "PerformanceAnalytics", "tidyverse", "lme4", "openxlsx")
 
 ## Now load or install&load all
 package.check <- lapply(
@@ -381,8 +380,6 @@ live.df<-left_join(live.df, hallID, by = "Code")
 test<-live.df%>%select(Code, userID)
 ```
 
-
-
 ## Conduct a join to see which col names need to be changed
 Also import all cols as char to enable the join with the df.
 ```{r}
@@ -393,12 +390,19 @@ df$group<-"Virtual"
 test.df<-compare_df_cols(live.df, df) # looks great! (this helped me catch the language col issue and some other things)
 ```
 
-
 ```{r}
 df.full<-full_join(live.df, df)
-df.full2<-full_join(live.df, df, by = character())
-summary(df.full$phone_loc)
-summary(df.full$changed_behaviour)
+```
+
+### REMOVE WITHDRAWALS
+There are actually more survey responses to remove. That one is the only for which we have both movement and survey data. 7 IDs with questionnaire results requested removal (their last request was for removal.) One is from before the copenhagen concert recording interval.
+```{r}
+withdraw<-c('22542356-471a-633f-c801-45a76f0b11cb','00afa8df-4bef-a5ae-55b2-44933117603a','dc381f4b-6a69-5a70-39f6-129568eaa6bc','83530137-77f7-afa8-b403-eee29ba8198f','6a917350-972c-f470-86e4-f4d548a6eddb','963dd442-f65f-d865-c73c-d461074631db','457b17cc-3b7d-ed41-5081-5969112cea4c')
+
+#rmwd remove withdrawals
+df.full.rmwd<-df.full%>%filter(! userID %in% withdraw) # this removed 5 pts, 4 of which had incomplete datasets, one had a full dataset.
+
+df.full<-df.full.rmwd
 ```
 
 ## Translations and factor
@@ -719,11 +723,17 @@ filename<-paste0("../output/Prepared_Data.Rda")
 saveRDS(df.full, filename)
 ```
 ## CSV file
-
+In the felles drive this appears strangely because excel is doing some text wrapping. Therefore, I made an xlsx version that can be viewed correctly.
 ```{r}
 filename<-paste0("../output/Prepared_Data.csv")
 write.csv(df.full, filename, row.names = FALSE)
 ```
+## XLSX file
+```{r}
+filename<-paste0("../output/Prepared_Data.xlsx")
+write.xlsx(df.full, filename,keepNA=TRUE, row.names = FALSE)
+```
+
 
 ## Make a codebook for reference
 ```{r}
