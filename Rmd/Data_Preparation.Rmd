@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Import libraries
 
 ```{r libraries}
-packages = c("psych", "readxl", "magrittr", "reshape2","ggpubr", "ltm","janitor", "PerformanceAnalytics", "tidyverse", "lme4", "openxlsx")
+packages = c("readxl", "magrittr", "reshape2","ggpubr", "ltm","janitor", "PerformanceAnalytics","lme4", "openxlsx","psych", "tidyverse")
 
 ## Now load or install&load all
 package.check <- lapply(
@@ -100,6 +100,7 @@ q5.dansk[q5.dansk!=q3.dansk]
 This shows that there are no discrepancies between the wording of the questions across the surveys.
 
 ##### List of question IDs
+Rename questions to question IDs.
 ```{r}
 q2id<-c("NR", 
         "userID",
@@ -153,7 +154,6 @@ codebook2<-data.frame(cbind(q2id, q2, q2.dansk)) #don't need to repeat for 3 or 
 
 ##### Rename cols in surveys
 Since you checked, you can rename surveys q3 and q5 in the same way as well
-
 ```{r}
 names(english.df2)<-q2id
 names(english.df3)<-q2id
@@ -170,6 +170,7 @@ names(dansk.df5)<-q2id
 q4<-names(english.df4)
 q4.dansk<-names(dansk.df4)
 ```
+
 ```{r}
 q4id<-c("NR",
        "userID",
@@ -279,6 +280,19 @@ list2env(dfs.dansk,globalenv())
 english.df1$language<-"English"
 dansk.df1$language<-"Danish"
 
+#### Label language in the other dfs
+# initially we had a few pts who were getting NAs in the language column because some people hadn't filled df1
+english.df2$language<-"English"
+dansk.df2$language<-"Danish"
+english.df3$language<-"English"
+dansk.df3$language<-"Danish"
+english.df4$language<-"English"
+dansk.df4$language<-"Danish"
+english.df5$language<-"English"
+dansk.df5$language<-"Danish"
+english.df6$language<-"English"
+dansk.df6$language<-"Danish"
+
 # Combine to larger dataframes
 df1<-bind_rows(english.df1, dansk.df1)
 df2<-bind_rows(english.df2, dansk.df2)
@@ -286,23 +300,27 @@ df3<-bind_rows(english.df3, dansk.df3)
 df4<-bind_rows(english.df4, dansk.df4)
 df5<-bind_rows(english.df5, dansk.df5)
 df6<-bind_rows(english.df6, dansk.df6)
-
 ```
 ## Create a wide spreadsheet
 ### Label the repeated measures labels
 ```{r}
-colnames(df2)[2:ncol(df2)]<-paste0(colnames(df2)[2:ncol(df2)], '_Beethoven')
-colnames(df3)[2:ncol(df3)]<-paste0(colnames(df3)[2:ncol(df3)], '_Schnittke')
-colnames(df5)[2:ncol(df5)]<-paste0(colnames(df5)[2:ncol(df5)], '_Folk')
+colnames(df2)[2:(ncol(df5)-1)]<-paste0(colnames(df2)[2:(ncol(df2)-1)], '_Beethoven')
+colnames(df3)[2:(ncol(df5)-1)]<-paste0(colnames(df3)[2:(ncol(df3)-1)], '_Schnittke')
+colnames(df5)[2:(ncol(df5)-1)]<-paste0(colnames(df5)[2:(ncol(df5)-1)], '_Folk')
 ```
 
 ### Combine into a wide spreadsheet
 ```{r}
-df<-full_join(df1, df2, by ="userID")
-df<-full_join(df, df3, by ="userID")
-df<-full_join(df, df4, by ="userID")
-df<-full_join(df, df5, by ="userID")
-df<-full_join(df, df6, by ="userID")
+df<-full_join(df1, df2, by =c("userID", "language"))
+df<-full_join(df, df3, by =c("userID", "language"))
+df<-full_join(df, df4, by =c("userID", "language"))
+df<-full_join(df, df5, by =c("userID", "language"))
+df<-full_join(df, df6, by =c("userID", "language"))
+```
+
+### check languages
+```{r}
+language_df<-df%>%select(userID, language)
 ```
 
 ## Data Cleaning
@@ -330,6 +348,51 @@ dedup<-duplicates%>%group_by(userID)%>%
 df<-df%>%filter(!userID %in% duplicates$userID)
 dedup<-dedup%>%select(-nacount) # remove the nacount col
 df<-df%>%bind_rows(dedup)
+
+# There are two codes from the virtual participants who are not in the ParticipantCode spreadsheet:
+## 1)  4e74e5b7-aa5b-3fba-2284-89bd559d8b02
+## 2)  7e7716d5-77ef-a28a-c678-3223b5a6b62d
+
+## This ID is a test: '7e7716d5-77ef-a28a-c678-3223b5a6b62d'
+df<-df%>%filter(! userID == '7e7716d5-77ef-a28a-c678-3223b5a6b62d')
+
+## And this ID is empty: '4e74e5b7-aa5b-3fba-2284-89bd559d8b02' 
+df<-df%>%filter(! userID == '4e74e5b7-aa5b-3fba-2284-89bd559d8b02')
+```
+
+## Exclusion
+We will exclude questionnaire data of participants who only filled survey 1 (and no other surveys) and who don't have sufficient motion data.
+### 1) select participants who filled only survey 1
+22 participants only filled survey 1.
+```{r}
+userID_list<-bind_rows(df2, df3, df4, df5, df6)%>%
+  select(userID)
+
+userID_list_df1<-df1%>%select(userID)
+
+only_in_df1<-anti_join(userID_list_df1, userID_list)
+
+only_in_df1_unique<-unique(only_in_df1)
+# 22 participants only filled survey 1 and no other surveys.
+```
+### 2) Check if they have usable motion
+16 participants only filled survey 1 and do not have usable motion. These 16 should be excluded from the data.
+```{r}
+# 2.1) Open spreadsheet from Finn
+pt_codes<-read_xlsx("../experimental-data/DSQ_Audience_Map_newCodes.xlsx")
+pt_codes<-pt_codes%>%rename(userID = "All DevID") 
+
+# 2.2) retrieve the IDs for only people who should NOT be excluded.
+usable_motion_df<-pt_codes%>%filter(Exclusion=="No") 
+
+# list of those you need to exclude. 
+exclude<-only_in_df1_unique%>%filter(! userID %in% usable_motion_df$userID)
+
+# There are 16 participants who only filled survey 1 and who do not have usable motion.
+
+# This also means that there are 6 participants who only filled survey 1 but who do have usable motion data. 
+
+# See the section on "Remove Withdrawals" below where they are excluded. 
 ```
 
 # Live Participants
@@ -364,20 +427,16 @@ live.df<-live.df%>%
 live.df$musician_status<-as.character(round(as.numeric(live.df$musician_status), digits = 0)) # rounded the number to nearest whole number
 
 ```
-## Add the userID col to the live participants spreadsheet
+## Add the userID (device) col to the live participants spreadsheet
 ```{r}
-setwd('../experimental-data/')
-hall.ids <- read_excel("Concert_participants_installations.xlsx", sheet = "HallPartIDs")
+id_codes<-pt_codes%>%select(userID, ParticipantCode, `Paper Q Codes`)
+live.df<-left_join(live.df,id_codes, by = c("ID" = "Paper Q Codes"))
 ```
+
+## Add ParticipantCode to the virtual participants spreadsheet
 ```{r}
-hall.ids<-rename(hall.ids, c("userID"="Installations"))
-hallID<-hall.ids%>%select(userID, Code)
-
-live.df$Code<-unlist(lapply(live.df$ID, function(x) {toupper(substring(x, 4))}))
-test<-live.df%>%select(Code, ID)
-
-live.df<-left_join(live.df, hallID, by = "Code")
-test<-live.df%>%select(Code, userID)
+df<-left_join(df,id_codes, by = "userID")
+df<-df%>%filter(is.na(`Paper Q Codes`)) #this helped me discover there were 5 live participants that were labelled virtual because they must have filled one of the surveys on their phone. Removed them.
 ```
 
 ## Conduct a join to see which col names need to be changed
@@ -391,18 +450,21 @@ test.df<-compare_df_cols(live.df, df) # looks great! (this helped me catch the l
 ```
 
 ```{r}
-df.full<-full_join(live.df, df)
+df.full.2<-full_join(live.df, df)
 ```
 
-### REMOVE WITHDRAWALS
-There are actually more survey responses to remove. That one is the only for which we have both movement and survey data. 7 IDs with questionnaire results requested removal (their last request was for removal.) One is from before the copenhagen concert recording interval.
+### Remove Withdrawals and Exclusions
+Some participants requested withdrawal after the concert. 7 IDs with questionnaire results requested removal (their last request was for removal.) One is from before the copenhagen concert recording interval.
 ```{r}
 withdraw<-c('22542356-471a-633f-c801-45a76f0b11cb','00afa8df-4bef-a5ae-55b2-44933117603a','dc381f4b-6a69-5a70-39f6-129568eaa6bc','83530137-77f7-afa8-b403-eee29ba8198f','6a917350-972c-f470-86e4-f4d548a6eddb','963dd442-f65f-d865-c73c-d461074631db','457b17cc-3b7d-ed41-5081-5969112cea4c')
 
 #rmwd remove withdrawals
-df.full.rmwd<-df.full%>%filter(! userID %in% withdraw) # this removed 5 pts, 4 of which had incomplete datasets, one had a full dataset.
+df.full.rmwd<-df.full.2%>%filter(! userID %in% withdraw) # this removed 5 pts, 4 of which had incomplete datasets, one had a full dataset.
 
-df.full<-df.full.rmwd
+#rmex: remove excluded participants (those who only filled survey 1 and did not have usable motion data).
+df.full.rmex<-df.full.rmwd%>%filter(! userID %in% exclude$userID) 
+
+df.full<-df.full.rmex
 ```
 
 ## Translations and factor
@@ -435,8 +497,6 @@ I did not realize that the subtitle would not be written in the surveys in the a
 df.full$viewing_with_others<-fct_collapse(df.full$viewing_with_others, Yes = c("Yes", "yes", "ja", "Ja", "My cousin", "My wife", "Parents"), No = c("No","Nope", "no", "Nei","Nej", "Aline"))
 df.full$phone_loc<-fct_collapse(df.full$phone_loc, Upper = c("It was located on my UPPER body", "Den befandt sig på min overkrop"), Lower = c("It was located on my LOWER body"), Other = c("Other", "Andet"))
 ```
-
-
 ## Pre-processing
 
 ### create a new ID col
@@ -474,15 +534,16 @@ df.full<-df.full%>%
 ```
 
 ### Factor
-Convert factor cols to factor
+Convert factor cols to factor.
 ```{r}
 dfFac<-df.full%>%select(
-  userID:viewing_with_others, 
+  Pt_ID:Seat_number, 
   gender:personal_relation, 
   aware_body_Beethoven:aware_others_moving_Beethoven,
   aware_body_Schnittke:aware_others_moving_Schnittke,
   aware_body:aware_others_moving,
   aware_body_Folk:aware_others_moving_Folk,
+  language:viewing_with_others,
   phone_loc)
 
 dfFac<-dfFac%>%mutate_all(factor)
@@ -504,7 +565,7 @@ When reviewing these summaries, I visually checked the min and the max values to
 # summary(df.full[71:80]) # check why admiration_Schnittke max = 7?
 # summary(df.full[81:90])
 # summary(df.full[91:100]) # check why negatively transformed schnittke max = 9? check why aware_movement_schnittke has one response 1.5, 
-# summary(df.full[101:110]) # check why Bach Familiar max = 7 # check why style has min 1 and max 7 # check why aware_body Bach has a value of 6
+#summary(df.full[101:110]) # check why Bach Familiar max = 7 # check why style has min 1 and max 7 # check why aware_body Bach has a value of 6
 # summary(df.full[111:120])  
 # summary(df.full[121:130])  
 # summary(df.full[131:140])  
@@ -608,7 +669,7 @@ AIMS<-df.full%>%
 
 summary(psych::alpha(AIMS))$raw_alpha # note that alpha becomes higher with many items and it may be a poor marker of internal consistency because of the large number of items in AIMS. Still this scale has previously been tested, and therefore we do not need to worry about checking this so much.
 
-df.full$AIMS<-rowMeans(AIMS, na.rm=TRUE)
+df.full$AIMS<-rowSums(AIMS, na.rm=TRUE)
 ```
 
 #### Kama Muta Scale (KAMMUS-S US)
@@ -703,16 +764,27 @@ df.full$AWE_Folk<-rowMeans(AWE, na.rm=TRUE)
 #### Create the averaged connected_audience for the virtual audience
 1. Mutate only the virtual measures. 2. Recombine.
 ```{r}
-df<-df.full
+connected_aud_df<-df.full
 
-virt.dat<-df%>%filter(group == "Virtual")%>%
+virt.dat<-connected_aud_df%>%filter(group == "Virtual")%>%
   mutate(connected_audience_Beethoven = (connected_audience_streaming_Beethoven+connected_audience_attending_Beethoven)/2)%>%
   mutate(connected_audience_Schnittke = (connected_audience_streaming_Schnittke+connected_audience_attending_Schnittke)/2)%>%
   mutate(connected_audience_Folk = (connected_audience_streaming_Folk+connected_audience_attending_Folk)/2)
   
-live.dat<-df%>%filter(group == "Live")
+live.dat<-connected_aud_df%>%filter(group == "Live")
 
 df.full<-bind_rows(live.dat, virt.dat)
+```
+
+## Remove unnecessary columns
+```{r}
+drop_cols<-c("Pt_ID", "Paper Q Codes")
+df.full<-df.full%>%select(! drop_cols)
+```
+
+## Move Participant Code to the beginning of the dataframe
+```{r}
+df.full<-df.full%>%select(ParticipantCode, everything())
 ```
 
 
@@ -751,4 +823,14 @@ codebook<-bind_rows(codebooks)
 filename<-paste0("../output/Codebook.csv")
 write.csv(codebook, filename, row.names = FALSE)
 ```
+
+### Save comments book
+```{r}
+comments<-df.full%>%select(ParticipantCode,ID,userID,group,language,Comments)%>%drop_na(Comments)
+filename<-paste0("../output/Qualitative_Analysis_Comments.csv")
+#write.csv(comments, filename, row.names = FALSE)
+filename<-paste0("../output/Qualitative_Analysis_Comments.xlsx")
+write.xlsx(comments, filename, row.names = FALSE)
+```
+
 
