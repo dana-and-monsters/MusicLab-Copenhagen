@@ -309,6 +309,13 @@ colnames(df3)[2:(ncol(df5)-1)]<-paste0(colnames(df3)[2:(ncol(df3)-1)], '_Schnitt
 colnames(df5)[2:(ncol(df5)-1)]<-paste0(colnames(df5)[2:(ncol(df5)-1)], '_Folk')
 ```
 
+### Create codebook to be used at the end
+```{r}
+names(df2)[2:42]
+cbook_Beethoven<-data.frame(ID = names(df2)[2:42], English_Q = codebook2[3:43,2], Danish_Q = codebook2[3:43,3])
+```
+
+
 ### Combine into a wide spreadsheet
 ```{r}
 df<-full_join(df1, df2, by =c("userID", "language"))
@@ -423,7 +430,7 @@ live.df[live.df=="NA"]=NA
 live.df<-live.df%>%
   mutate(language = ifelse(startsWith(ID, "DSQd"), "Danish", "English")) # check<-live.df%>%select(ID,language) # double checked and it works 
 
-# prepare for factoring musician status --> when pts checked off multipleboxes, this was averaged but for categorizing them we need to put them into a single categoruy so we could simply round I guess...
+# prepare for factoring musician status --> when pts checked off multipleboxes, this was averaged but for categorizing them we need to put them into a single category so we could simply round I guess...
 live.df$musician_status<-as.character(round(as.numeric(live.df$musician_status), digits = 0)) # rounded the number to nearest whole number
 
 ```
@@ -463,6 +470,10 @@ df.full.rmwd<-df.full.2%>%filter(! userID %in% withdraw) # this removed 5 pts, 4
 
 #rmex: remove excluded participants (those who only filled survey 1 and did not have usable motion data).
 df.full.rmex<-df.full.rmwd%>%filter(! userID %in% exclude$userID) 
+
+exclude<-'08bfe178-d74a-f31f-2c83-25cd45231e69' # Finn said "This is the participant we decided to exclude because their survey responses seemed more like accidents, with no music section with more than a couple of answers"
+
+df.full.rmex<-df.full.rmex%>%filter(! userID == exclude) 
 
 df.full<-df.full.rmex
 ```
@@ -787,13 +798,13 @@ df.full<-df.full%>%select(! drop_cols)
 df.full<-df.full%>%select(ParticipantCode, everything())
 ```
 
-
-# Save prepared data
+# Save prepared data (Internal)
 ## R format
 ```{r}
 filename<-paste0("../output/Prepared_Data.Rda")
 saveRDS(df.full, filename)
 ```
+
 ## CSV file
 In the felles drive this appears strangely because excel is doing some text wrapping. Therefore, I made an xlsx version that can be viewed correctly.
 ```{r}
@@ -807,7 +818,36 @@ write.xlsx(df.full, filename,keepNA=TRUE, row.names = FALSE)
 ```
 
 
+# Save prepared data (External)
+Remove the survey ID for the external files. 
+userID: phone ID string
+Seat number: yellow data and should be removed for external data
+```{r}
+drop_cols<-c("ID", "userID", "Seat_number")
+df.full<-df.full%>%select(! drop_cols)
+```
+
+## R format
+```{r}
+filename<-paste0("../output/Prepared_Data_External.Rda")
+saveRDS(df.full, filename)
+```
+
+## CSV file
+In the felles drive this appears strangely because excel is doing some text wrapping. Therefore, I made an xlsx version that can be viewed correctly.
+```{r}
+filename<-paste0("../output/Prepared_Data_External.csv")
+write.csv(df.full, filename, row.names = FALSE)
+```
+## XLSX file
+```{r}
+filename<-paste0("../output/Prepared_Data_External.xlsx")
+write.xlsx(df.full, filename,keepNA=TRUE, row.names = FALSE)
+```
+
+
 ## Make a codebook for reference
+These codebooks correspond to the virtual audience only. 
 ```{r}
 changeHead<-function(x){
   names(x)= c("ID", "English_Q", "Danish_Q") 
@@ -818,15 +858,33 @@ codebooks<-lapply(codebooks, changeHead)
 
 codebook<-bind_rows(codebooks)
 ```
+
+I also need to make a codebook that works for the final prepared_data that will be released publicly. 
+```{r}
+#names(df.full)
+codebook.public<-data.frame(ID = names(df.full))
+
+cb.public<-left_join(codebook.public, codebook, by = "ID")
+# could not find a solution to fill the missing cells so will just do it manually. 
+```
+
+
 ### Save codebook
 ```{r}
-filename<-paste0("../output/Codebook.csv")
-write.csv(codebook, filename, row.names = FALSE)
+filename<-paste0("../output/Codebook_Virtual.csv")
+write.csv(cb.public, filename, row.names = FALSE)
+
+filename<-paste0("../output/Codebook_Incomplete.csv") # I edited this by hand to fill in the questions of some columns
+write.csv(cb.public, filename, row.names = FALSE)
+
+filename<-paste0("../output/Codebook_piece.csv") # these are the questions that were copy and pasted 
+write.csv(codebook2, filename, row.names = FALSE)
+
 ```
 
 ### Save comments book
 ```{r}
-comments<-df.full%>%select(ParticipantCode,ID,userID,group,language,Comments)%>%drop_na(Comments)
+comments<-df.full%>%select(ParticipantCode,group,language,Comments)%>%drop_na(Comments)
 filename<-paste0("../output/Qualitative_Analysis_Comments.csv")
 #write.csv(comments, filename, row.names = FALSE)
 filename<-paste0("../output/Qualitative_Analysis_Comments.xlsx")
